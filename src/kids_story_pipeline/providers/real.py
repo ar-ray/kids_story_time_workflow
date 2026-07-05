@@ -120,8 +120,19 @@ class GeminiImages(ImageProvider):
                 if data and data.get("data"):
                     out.parent.mkdir(parents=True, exist_ok=True)
                     out.write_bytes(base64.b64decode(data["data"]))
+                    self._fit_to_size(out, size)
                     return out
         raise RuntimeError(f"Gemini returned no image for prompt: {prompt[:80]}")
+
+    @staticmethod
+    def _fit_to_size(path: Path, size: tuple[int, int]) -> None:
+        """Gemini returns its native resolution (e.g. 1376x768 for 16:9);
+        honor the requested size so downstream QC/ffmpeg get exact frames."""
+        from PIL import Image
+        with Image.open(path) as im:
+            if im.size == size:
+                return
+            im.convert("RGB").resize(size, Image.LANCZOS).save(path)
 
 
 class KlingVideo(VideoProvider):

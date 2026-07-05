@@ -71,8 +71,13 @@ def test_anthropic_parses_fenced_json_and_sends_headers(profile, monkeypatch):
 
 def test_gemini_uses_header_auth_and_new_model_id(profile, tmp_path,
                                                   monkeypatch):
+    from io import BytesIO
+    from PIL import Image
     captured = {}
-    png = base64.b64encode(b"fake-png-bytes").decode()
+    # Gemini returns its native resolution (1376x768 for 16:9 at 1K)
+    buf = BytesIO()
+    Image.new("RGB", (1376, 768), (10, 20, 40)).save(buf, "PNG")
+    png = base64.b64encode(buf.getvalue()).decode()
 
     def fake_post(url, headers=None, json=None, timeout=None):
         captured.update(url=url, headers=headers, body=json)
@@ -88,7 +93,7 @@ def test_gemini_uses_header_auth_and_new_model_id(profile, tmp_path,
     assert captured["headers"]["x-goog-api-key"] == "test-gemini_api_key"
     cfg = captured["body"]["generationConfig"]["imageConfig"]
     assert cfg["aspectRatio"] == "16:9"
-    assert out.read_bytes() == b"fake-png-bytes"
+    assert Image.open(out).size == (1280, 720)      # resized to requested size
 
 
 @pytest.mark.parametrize("size,expected", [
