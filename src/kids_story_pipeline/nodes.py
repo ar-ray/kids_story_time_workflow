@@ -56,11 +56,22 @@ def scene_director(state: PipelineState, p: Providers, prof: Profile, run_dir: P
     system = ("SCENE_TASK: Split the numbered narration lines into 6-16 visual "
               "scenes for a bedtime video. Return JSON: {\"scenes\": [{\"title\": str, "
               "\"line_start\": int, \"line_end\": int, \"image_prompt\": str, "
-              "\"sfx_prompt\": str}]} with contiguous, non-overlapping ranges.")
+              "\"sfx_prompt\": str}]} with contiguous, non-overlapping ranges "
+              "(line_end is EXCLUSIVE, python-slice style).")
     result = p.llm.complete_json(system, numbered)
+    # Chunk by consecutive line_starts only: models disagree on whether
+    # line_end is inclusive or exclusive, and trusting it silently drops the
+    # last line of every scene. Starts alone guarantee full coverage.
+    raw = sorted((s for s in result.get("scenes", [])
+                  if isinstance(s.get("line_start"), int)),
+                 key=lambda s: s["line_start"])
+    starts = [min(max(0, s["line_start"]), len(all_lines)) for s in raw]
+    if starts:
+        starts[0] = 0  # never drop the opening lines
+    ends = starts[1:] + [len(all_lines)]
     scenes: list[Scene] = []
-    for i, s in enumerate(result.get("scenes", [])):
-        chunk = all_lines[s["line_start"]:s["line_end"]]
+    for i, (s, start, end) in enumerate(zip(raw, starts, ends)):
+        chunk = all_lines[start:end]
         if not chunk:
             continue
         scenes.append(Scene(

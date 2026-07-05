@@ -81,6 +81,44 @@ def test_mux_and_streams(tmp_path):
     assert sorted(ff.probe_streams(out)) == ["audio", "video"]
 
 
+# ---- scene director chunking --------------------------------------------------
+
+def test_scene_director_covers_all_lines_despite_inclusive_ends(
+        fast_profile, tmp_path):
+    """Live LLMs return inclusive line_end (python code sliced exclusively),
+    which silently dropped the last line of every scene. Chunking must use
+    consecutive line_starts and cover every line regardless of convention."""
+    from kids_story_pipeline import nodes
+    from kids_story_pipeline.state import Line, Scene
+
+    lines = [Line(text=f"Line number {i} of the story.", role="narrator")
+             for i in range(10)]
+    state = PipelineState(run_id="sd", story_text="x", profile_name="bedtime")
+    state.style_anchor = "style"
+    state.scenes = [Scene(id=0, title="__all__", lines=lines)]
+
+    class InclusiveEndLLM:
+        def complete_json(self, system, prompt):
+            return {"scenes": [  # inclusive ends + first start not at 0
+                {"title": "a", "line_start": 1, "line_end": 3,
+                 "image_prompt": "p1", "sfx_prompt": "s"},
+                {"title": "b", "line_start": 4, "line_end": 6,
+                 "image_prompt": "p2", "sfx_prompt": "s"},
+                {"title": "c", "line_start": 7, "line_end": 9,
+                 "image_prompt": "p3", "sfx_prompt": "s"},
+            ]}
+
+    class P:
+        llm = InclusiveEndLLM()
+
+    conf = nodes.scene_director(state, P(), fast_profile, tmp_path)
+    assert conf == 1.0
+    assert sum(len(sc.lines) for sc in state.scenes) == len(lines)
+    texts = [l.text for sc in state.scenes for l in sc.lines]
+    assert texts == [l.text for l in lines]          # order + no dupes
+    assert all("style" in sc.image_prompt for sc in state.scenes)
+
+
 # ---- gate pause / resume ----------------------------------------------------
 
 def test_gate_pauses_and_resume_approves(fast_profile, tmp_path, monkeypatch):
