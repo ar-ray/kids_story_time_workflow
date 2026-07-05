@@ -54,6 +54,7 @@ def execute(state: PipelineState, profile: Profile) -> PipelineState:
                          state.pending_gate["confidence"], state.run_id)
     providers = build_providers(state.mock, profile)
     rd = run_dir_for(state.run_id)
+    state.status = "running"  # a resumed 'failed' run is running again
     try:
         for name, fn, gated in NODES:
             if name in state.completed_nodes:
