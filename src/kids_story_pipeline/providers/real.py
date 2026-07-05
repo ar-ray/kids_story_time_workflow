@@ -169,6 +169,17 @@ class ElevenLabsAudio(AudioProvider):
     def _headers(self) -> dict:
         return {"xi-api-key": self.api_key}
 
+    def first_premade_voice(self) -> str | None:
+        """First premade voice on the account. Free plans can use premade
+        voices via the API but NOT library voices (402 paid_plan_required)."""
+        resp = requests.get(f"{self.BASE}/voices", headers=self._headers(),
+                            timeout=60)
+        resp.raise_for_status()
+        for v in resp.json().get("voices", []):
+            if v.get("category") == "premade":
+                return v["voice_id"]
+        return None
+
     def tts(self, text: str, voice: str, out: Path) -> Path:
         voice_id = self.voices.get(voice, voice)
         resp = requests.post(

@@ -152,6 +152,17 @@ def test_elevenlabs_sfx_and_music_clamp_durations(profile, tmp_path,
     assert calls[3][1]["music_length_ms"] == 600_000
 
 
+def test_elevenlabs_first_premade_voice(profile, monkeypatch):
+    def fake_get(url, headers=None, timeout=None):
+        assert url.endswith("/v1/voices")
+        return FakeResponse(payload={"voices": [
+            {"voice_id": "libX", "category": "generated"},
+            {"voice_id": "preY", "category": "premade"}]})
+
+    monkeypatch.setattr(real.requests, "get", fake_get)
+    assert real.ElevenLabsAudio(profile).first_premade_voice() == "preY"
+
+
 def test_elevenlabs_tts_endpoint_and_settings(profile, tmp_path, monkeypatch):
     captured = {}
 
@@ -170,14 +181,20 @@ def test_elevenlabs_tts_endpoint_and_settings(profile, tmp_path, monkeypatch):
 
 # ---- smoke runner ------------------------------------------------------------
 
-def test_resolve_smoke_voice_falls_back_on_placeholder():
-    prof = load_profile("bedtime")
+def test_resolve_smoke_voice_prefers_configured_profile_voice():
+    prof = load_profile("bedtime")  # now ships real premade voice ids
     voice, fallback = smoke.resolve_smoke_voice(prof)
-    assert fallback and voice == smoke.FALLBACK_VOICE_ID
+    assert not fallback and not voice.startswith(smoke.PLACEHOLDER_PREFIX)
 
-    prof.voices = {"narrator": "realvoiceid"}
-    voice, fallback = smoke.resolve_smoke_voice(prof)
-    assert not fallback and voice == "realvoiceid"
+
+def test_resolve_smoke_voice_falls_back_to_account_premade():
+    prof = load_profile("bedtime",
+                        overrides={"voices": {"narrator": "REPLACE_WITH_X"}})
+    voice, fallback = smoke.resolve_smoke_voice(prof, _FakeAudio())
+    assert fallback and voice == "premade-fallback"
+
+    with pytest.raises(RuntimeError, match="no narrator voice"):
+        smoke.resolve_smoke_voice(prof, audio=None)
 
 
 class _FakeLLM:
@@ -198,6 +215,9 @@ class _FakeAudio:
         out.write_bytes(b"aud")
         return out
 
+    def first_premade_voice(self):
+        return "premade-fallback"
+
 
 def _video_missing_key():
     raise real.MissingKeyError("FAL_KEY is not set")
@@ -209,14 +229,15 @@ def _factories():
 
 
 def test_smoke_only_subset_passes_and_notes_fallback_voice(tmp_path, capsys):
-    prof = load_profile("bedtime")
+    prof = load_profile("bedtime",
+                        overrides={"voices": {"narrator": "REPLACE_WITH_X"}})
     ok = smoke.run_smoke(_factories(), prof, tmp_path,
                          only={"llm", "image", "tts"})
     out = capsys.readouterr().out
     assert ok
     assert "✅ llm" in out and "✅ image" in out and "✅ tts" in out
     assert "video" not in out          # deselected check never constructed
-    assert "fallback voice" in out     # placeholder voice ids in bedtime.yaml
+    assert "premade voice as fallback" in out
 
 
 def test_smoke_one_failure_does_not_hide_others(tmp_path, capsys):

@@ -17,18 +17,27 @@ from .providers.real import MissingKeyError
 
 CHECKS = ("llm", "image", "tts", "video")
 
-# ElevenLabs premade voice ("Rachel") so tts can be smoked before the
-# channel's own voice ids are configured in the profile.
-FALLBACK_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 PLACEHOLDER_PREFIX = "REPLACE_WITH"
 
 
-def resolve_smoke_voice(profile) -> tuple[str, bool]:
-    """Return (voice_id, used_fallback) for the narrator voice."""
+def resolve_smoke_voice(profile, audio=None) -> tuple[str, bool]:
+    """Return (voice_id, used_fallback) for the narrator voice.
+
+    Falls back to the first premade voice on the ElevenLabs account when the
+    profile still has placeholder ids. (Free plans can use premade voices via
+    the API, but hardcoded library voices 402 with paid_plan_required.)
+    """
     configured = (profile.voices or {}).get("narrator", "")
-    if not configured or configured.startswith(PLACEHOLDER_PREFIX):
-        return FALLBACK_VOICE_ID, True
-    return configured, False
+    if configured and not configured.startswith(PLACEHOLDER_PREFIX):
+        return configured, False
+    picker = getattr(audio, "first_premade_voice", None)
+    voice = picker() if picker else None
+    if not voice:
+        raise RuntimeError(
+            "no narrator voice configured (profile has placeholder ids) and "
+            "no premade voice found on the account — set voices in the "
+            "profile yaml")
+    return voice, True
 
 
 def real_factories(profile) -> dict[str, Callable[[], object]]:
@@ -91,13 +100,14 @@ def run_smoke(factories: dict[str, Callable[[], object]], profile,
         return f"{profile.image_model} -> {out}"
 
     def check_tts(audio):
-        voice, used_fallback = resolve_smoke_voice(profile)
+        voice, used_fallback = resolve_smoke_voice(profile, audio)
         out = out_dir / "smoke_tts.mp3"
         audio.tts("Hello from the bedtime pipeline.", voice, out)
         if not out.exists() or out.stat().st_size == 0:
             raise RuntimeError("no audio bytes written")
-        note = (" [using premade fallback voice — set narrator/conductor "
-                "ids in the profile]" if used_fallback else "")
+        note = (" [using account's first premade voice as fallback — set "
+                "narrator/conductor ids in the profile]" if used_fallback
+                else "")
         return f"voice {voice} -> {out}{note}"
 
     def check_video(video):
