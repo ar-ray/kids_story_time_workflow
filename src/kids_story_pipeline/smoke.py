@@ -55,7 +55,8 @@ def real_factories(profile) -> dict[str, Callable[[], object]]:
 def _tiny_png(out: Path) -> Path:
     from PIL import Image
     out.parent.mkdir(parents=True, exist_ok=True)
-    Image.new("RGB", (320, 180), (20, 30, 70)).save(out)
+    # Kling rejects inputs under 300x300 (fal error: image_too_small)
+    Image.new("RGB", (640, 360), (20, 30, 70)).save(out)
     return out
 
 

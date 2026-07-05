@@ -160,9 +160,15 @@ class KlingVideo(VideoProvider):
             if st.get("status") in ("FAILED", "ERROR"):
                 raise RuntimeError(f"Kling job failed: {st}")
             time.sleep(5)
-        result = requests.get(response_url,
-                              headers={"Authorization": f"Key {self.api_key}"},
-                              timeout=60).json()
+        resp = requests.get(response_url,
+                            headers={"Authorization": f"Key {self.api_key}"},
+                            timeout=60)
+        # failed jobs also reach status COMPLETED — the error is in the
+        # response body (e.g. 422 image_too_small)
+        _raise_for_status(resp)
+        result = resp.json()
+        if not result.get("video", {}).get("url"):
+            raise RuntimeError(f"Kling returned no video: {str(result)[:300]}")
         video_url = result["video"]["url"]
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(requests.get(video_url, timeout=300).content)
