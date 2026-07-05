@@ -74,9 +74,11 @@ clip; artifacts land in `runs/smoke-<timestamp>/`.) If providers churn again:
 Anthropic <https://docs.claude.com/en/api/overview> ·
 Gemini images <https://ai.google.dev/gemini-api/docs/image-generation> ·
 ElevenLabs <https://elevenlabs.io/docs/api-reference> ·
-fal/Kling <https://fal.ai/models>. Also set the two ElevenLabs voice ids in
-`config/profiles/bedtime.yaml` (until then, `smoke` falls back to a premade
-voice for the tts check and warns).
+fal/Kling <https://fal.ai/models>. Voice ids in `config/profiles/bedtime.yaml`
+ship with ElevenLabs premade voices (George/Matilda) — free plans can use
+premade voices via the API, but **not** library voices (402
+`paid_plan_required`). Gemini image generation has **no free-tier quota**;
+enable billing on the Google AI Studio project first.
 
 Typical real-mode cost: **~$8–15/video** (hero animation dominates), plus the
 ElevenLabs subscription.

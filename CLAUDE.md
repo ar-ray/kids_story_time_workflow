@@ -32,10 +32,9 @@ be marked "Made for Kids" / COPPA when uploaded).
 - Ask clarifying questions when a task is ambiguous; always test before commit
 
 ## Pending / known gaps (good first tasks)
-1. Run `smoke` against live keys (endpoints/model ids were doc-verified
-   2026-07 and unit-tested offline, but no live call has been made yet)
-2. Set two ElevenLabs voice ids in `config/profiles/bedtime.yaml`
-   (`smoke` falls back to a premade voice until then)
+1. Gemini image gen needs billing enabled on the Google AI Studio project —
+   the API free tier has zero image quota (`limit: 0`), so the image/video
+   smoke checks stay red until then (llm+tts verified live 2026-07-05)
 3. v2 roadmap: vision-LLM QC with auto re-roll (hard-reject uncanny faces),
    per-scene SFX buses, read-along captions, 40-min compilation builder,
    LangGraph migration when branching lands
