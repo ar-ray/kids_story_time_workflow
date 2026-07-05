@@ -1,8 +1,9 @@
 """Real provider clients. Thin `requests` wrappers, keys from environment.
 
-IMPORTANT: these are written against provider docs as of mid-2026 but have NOT
-been exercised against live APIs from CI. Before your first paid run, verify
-endpoints/models against:
+Endpoints/models verified against provider docs 2026-07 (Anthropic Messages,
+Gemini generateContent image API, fal.ai queue + Kling v3 schema, ElevenLabs
+TTS/SFX/music). Tests are offline by design, so re-verify before a paid run
+if providers have shipped changes since:
   - Anthropic:   https://docs.claude.com/en/api/overview
   - Gemini img:  https://ai.google.dev/gemini-api/docs/image-generation
   - ElevenLabs:  https://elevenlabs.io/docs/api-reference
@@ -71,11 +72,18 @@ class GeminiImages(ImageProvider):
         self.model = profile.image_model
         self.api_key = _key("GEMINI_API_KEY")
 
+    @staticmethod
+    def _aspect_ratio(size: tuple[int, int]) -> str:
+        w, h = size
+        if w == h:
+            return "1:1"
+        return "16:9" if w > h else "9:16"
+
     def generate(self, prompt: str, out: Path, reference: Path | None = None,
                  size: tuple[int, int] = (1280, 720)) -> Path:
         import base64
         url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-               f"{self.model}:generateContent?key={self.api_key}")
+               f"{self.model}:generateContent")
         parts: list[dict] = [{"text": prompt}]
         if reference is not None:
             parts.insert(0, {
@@ -84,7 +92,17 @@ class GeminiImages(ImageProvider):
                     "data": base64.b64encode(reference.read_bytes()).decode(),
                 }
             })
-        resp = requests.post(url, json={"contents": [{"parts": parts}]}, timeout=300)
+        resp = requests.post(
+            url,
+            headers={"x-goog-api-key": self.api_key},
+            json={
+                "contents": [{"parts": parts}],
+                "generationConfig": {
+                    "imageConfig": {"aspectRatio": self._aspect_ratio(size)},
+                },
+            },
+            timeout=300,
+        )
         resp.raise_for_status()
         for cand in resp.json().get("candidates", []):
             for part in cand.get("content", {}).get("parts", []):
@@ -108,11 +126,15 @@ class KlingVideo(VideoProvider):
         import base64
         data_uri = ("data:image/png;base64,"
                     + base64.b64encode(image.read_bytes()).decode())
+        # Kling v3 accepts duration as a string enum "3".."15" only.
+        duration = str(min(15, max(3, int(round(duration_s)))))
         submit = requests.post(
             f"https://queue.fal.run/{self.model}",
             headers={"Authorization": f"Key {self.api_key}"},
-            json={"image_url": data_uri, "prompt": motion_prompt,
-                  "duration": str(int(round(duration_s)))},
+            json={"start_image_url": data_uri, "prompt": motion_prompt,
+                  "duration": duration,
+                  # the pipeline supplies its own narration/music tracks
+                  "generate_audio": False},
             timeout=60,
         )
         submit.raise_for_status()
@@ -165,7 +187,9 @@ class ElevenLabsAudio(AudioProvider):
     def sfx(self, prompt: str, duration_s: float, out: Path) -> Path:
         resp = requests.post(
             f"{self.BASE}/sound-generation", headers=self._headers(),
-            json={"text": prompt, "duration_seconds": min(22.0, duration_s)},
+            # API allows 0.5-30 s
+            json={"text": prompt,
+                  "duration_seconds": max(0.5, min(30.0, duration_s))},
             timeout=300,
         )
         resp.raise_for_status()
@@ -176,8 +200,10 @@ class ElevenLabsAudio(AudioProvider):
     def music(self, prompt: str, duration_s: float, out: Path) -> Path:
         resp = requests.post(
             f"{self.BASE}/music", headers=self._headers(),
+            # API allows 3000-600000 ms
             json={"prompt": prompt,
-                  "music_length_ms": int(duration_s * 1000)},
+                  "music_length_ms": max(3000, min(600_000,
+                                                   int(duration_s * 1000)))},
             timeout=600,
         )
         resp.raise_for_status()

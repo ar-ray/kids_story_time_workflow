@@ -8,6 +8,6 @@ max_reading_grade: 5.5
 gate_threshold: 0.75
 music_gain: 0.14
 llm_model: "claude-sonnet-4-6"
-image_model: "gemini-3-pro-image-preview"
+image_model: "gemini-3-pro-image"
 video_model: "fal-ai/kling-video/v3/standard/image-to-video"
 scary_words: [blood, gun, knife, demon]

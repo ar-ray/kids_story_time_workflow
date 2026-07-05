@@ -15,7 +15,7 @@ gate_enabled: true
 music_gain: 0.10
 shorts_max_s: 60.0
 llm_model: "claude-sonnet-4-6"
-image_model: "gemini-3-pro-image-preview"   # Nano Banana Pro — verify current id before real runs
+image_model: "gemini-3-pro-image"   # Nano Banana Pro — id verified 2026-07
 video_model: "fal-ai/kling-video/v3/standard/image-to-video"
 style_anchor: >-
   storybook illustration, soft watercolor and gouache, deep blue and warm gold

@@ -33,7 +33,7 @@ class Profile:
     shorts_max_s: float = 60.0
     voices: dict[str, str] = field(default_factory=dict)   # role -> voice id
     llm_model: str = "claude-sonnet-4-6"
-    image_model: str = "gemini-3-pro-image-preview"        # "Nano Banana Pro"; verify current id
+    image_model: str = "gemini-3-pro-image"                # "Nano Banana Pro"; id verified 2026-07
     video_model: str = "fal-ai/kling-video/v3/standard/image-to-video"
     raw: dict[str, Any] = field(default_factory=dict)
 
