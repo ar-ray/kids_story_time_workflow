@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -196,6 +197,17 @@ class ElevenLabsAudio(AudioProvider):
     def _headers(self) -> dict:
         return {"xi-api-key": self.api_key}
 
+    def _resolve_voice(self, voice: str) -> str:
+        """Map a script role to a voice id. Unmapped roles (the LLM invents
+        ones like 'refrain' or character names) read in the narrator's voice
+        instead of 404ing as a literal voice id."""
+        mapped = self.voices.get(voice)
+        if mapped:
+            return mapped
+        if re.fullmatch(r"[A-Za-z0-9]{16,}", voice):
+            return voice  # already a raw ElevenLabs voice id
+        return self.voices.get("narrator", voice)
+
     def first_premade_voice(self) -> str | None:
         """First premade voice on the account. Free plans can use premade
         voices via the API but NOT library voices (402 paid_plan_required)."""
@@ -208,7 +220,7 @@ class ElevenLabsAudio(AudioProvider):
         return None
 
     def tts(self, text: str, voice: str, out: Path) -> Path:
-        voice_id = self.voices.get(voice, voice)
+        voice_id = self._resolve_voice(voice)
         resp = requests.post(
             f"{self.BASE}/text-to-speech/{voice_id}",
             headers=self._headers(),

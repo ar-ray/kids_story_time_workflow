@@ -189,11 +189,34 @@ def test_elevenlabs_tts_endpoint_and_settings(profile, tmp_path, monkeypatch):
 
     monkeypatch.setattr(real.requests, "post", fake_post)
     out = tmp_path / "v.mp3"
-    real.ElevenLabsAudio(profile).tts("hi", "voice123", out)
-    assert captured["url"].endswith("/v1/text-to-speech/voice123")
+    raw_id = "VoiceId0123456789abc"  # raw ids (16+ alnum) pass through
+    real.ElevenLabsAudio(profile).tts("hi", raw_id, out)
+    assert captured["url"].endswith(f"/v1/text-to-speech/{raw_id}")
     assert captured["headers"]["xi-api-key"] == "test-elevenlabs_api_key"
     assert captured["body"]["model_id"] == "eleven_multilingual_v2"
     assert out.read_bytes() == b"speech-bytes"
+
+
+def test_elevenlabs_unmapped_role_reads_as_narrator(profile, tmp_path,
+                                                    monkeypatch):
+    """The script LLM invents roles like 'refrain' — they must fall back to
+    the narrator voice, not 404 as a literal voice id."""
+    urls = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        urls.append(url)
+        return FakeResponse(content=b"speech-bytes")
+
+    monkeypatch.setattr(real.requests, "post", fake_post)
+    audio = real.ElevenLabsAudio(profile)
+    narrator_id = profile.voices["narrator"]
+
+    audio.tts("hi", "refrain", tmp_path / "a.mp3")     # unmapped role
+    audio.tts("hi", "narrator", tmp_path / "b.mp3")    # mapped role
+    audio.tts("hi", "conductor", tmp_path / "c.mp3")   # mapped role
+    assert urls[0].endswith(f"/v1/text-to-speech/{narrator_id}")
+    assert urls[1].endswith(f"/v1/text-to-speech/{narrator_id}")
+    assert urls[2].endswith(f"/v1/text-to-speech/{profile.voices['conductor']}")
 
 
 # ---- smoke runner ------------------------------------------------------------
