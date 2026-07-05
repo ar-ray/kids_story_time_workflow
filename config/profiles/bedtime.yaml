@@ -36,5 +36,5 @@ scary_words:
   - demon
   - ghost
 voices:
-  narrator: "REPLACE_WITH_ELEVENLABS_VOICE_ID"     # warm, low-energy (e.g. audition Matilda/George)
-  conductor: "REPLACE_WITH_SECOND_VOICE_ID"
+  narrator: "JBFqnCBsd6RMkjVDRZzb"    # George — warm, captivating storyteller (ElevenLabs premade)
+  conductor: "XrExE9yKIg1WjnnlVkGX"   # Matilda — knowledgeable, professional (ElevenLabs premade)
