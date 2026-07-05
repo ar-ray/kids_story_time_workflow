@@ -3,6 +3,7 @@
   python -m kids_story_pipeline run --story examples/sample_story.txt --mock
   python -m kids_story_pipeline resume <RUN_ID> --approve
   python -m kids_story_pipeline doctor
+  python -m kids_story_pipeline smoke [--only llm,image,tts,video]
 """
 from __future__ import annotations
 
@@ -36,10 +37,20 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("doctor", help="check environment and API keys")
 
+    p_smoke = sub.add_parser(
+        "smoke", help="one tiny REAL (paid) API call per provider to "
+                      "confirm keys work before a full run")
+    p_smoke.add_argument("--profile", default="bedtime")
+    p_smoke.add_argument("--only", default=None,
+                         help="comma-separated subset of: llm,image,tts,video")
+
     args = parser.parse_args(argv)
 
     if args.cmd == "doctor":
         return _doctor()
+
+    if args.cmd == "smoke":
+        return _smoke(args)
 
     overrides = {"gate_enabled": False} if getattr(args, "no_gate", False) else None
     profile = load_profile(args.profile, overrides)
@@ -74,7 +85,30 @@ def _doctor() -> int:
         print(f"{'✅' if present else '⚠️ '} {key}: "
               f"{'set' if present else 'missing (mock mode still works)'}")
     print("Mock mode needs only ffmpeg/ffprobe. Real mode needs all four keys.")
+    print("Keys set? Run `python -m kids_story_pipeline smoke` to make one "
+          "tiny paid call per provider before a full run.")
     return 0 if ok else 1
+
+
+def _smoke(args) -> int:
+    from datetime import datetime
+
+    from .smoke import CHECKS, real_factories, run_smoke
+
+    only = None
+    if args.only:
+        only = {c.strip() for c in args.only.split(",") if c.strip()}
+        unknown = only - set(CHECKS)
+        if unknown:
+            print(f"unknown --only checks: {', '.join(sorted(unknown))} "
+                  f"(valid: {','.join(CHECKS)})", file=sys.stderr)
+            return 2
+
+    profile = load_profile(args.profile)
+    out_dir = (Path("runs")
+               / f"smoke-{datetime.now().strftime('%Y%m%d-%H%M%S')}")
+    return 0 if run_smoke(real_factories(profile), profile, out_dir,
+                          only=only) else 1
 
 
 if __name__ == "__main__":
