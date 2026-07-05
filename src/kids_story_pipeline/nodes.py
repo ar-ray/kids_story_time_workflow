@@ -35,9 +35,12 @@ def intake(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> 
 
 def script_agent(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> float:
     system = ("SCRIPT_TASK: You adapt children's stories into bedtime narration "
-              f"scripts for ages {prof.target_age}. Short sentences, a soothing "
-              "repeated refrain, gentle pacing. Tag dialogue lines with the "
-              "speaking character's role. Return JSON: "
+              f"scripts for ages {prof.target_age}. Every sentence must be very "
+              "short: aim for 5-9 words, never more than 12. Simple everyday "
+              f"words. Target US reading grade {prof.max_reading_grade} or "
+              "below (Flesch-Kincaid) — this is checked by an automated gate. "
+              "Use a soothing repeated refrain and gentle pacing. Tag dialogue "
+              "lines with the speaking character's role. Return JSON: "
               '{"title": str, "refrain": str, "lines": [{"text": str, "role": str}]}')
     result = p.llm.complete_json(system, "STORY:\n" + state.story_text)
     state.title = result.get("title", "A Sleepy Story")
@@ -51,7 +54,10 @@ def script_agent(state: PipelineState, p: Providers, prof: Profile, run_dir: Pat
 
 
 def scene_director(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> float:
-    all_lines = state.scenes[0].lines
+    # Flatten across ALL scenes, not scenes[0]: a re-run after a pause/crash
+    # sees its own previous bucketing (this node overwrites state.scenes),
+    # and reading only scenes[0] would shrink the script to one bucket.
+    all_lines = [l for sc in state.scenes for l in sc.lines]
     numbered = "\n".join(f"{i}: {l.text}" for i, l in enumerate(all_lines))
     system = ("SCENE_TASK: Split the numbered narration lines into 6-16 visual "
               "scenes for a bedtime video. Return JSON: {\"scenes\": [{\"title\": str, "

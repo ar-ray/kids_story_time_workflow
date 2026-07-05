@@ -119,6 +119,36 @@ def test_scene_director_covers_all_lines_despite_inclusive_ends(
     assert all("style" in sc.image_prompt for sc in state.scenes)
 
 
+def test_scene_director_rerun_after_pause_keeps_all_lines(fast_profile,
+                                                          tmp_path):
+    """Re-running scene_director (gate pause -> resume) must not shrink the
+    script: the node overwrites state.scenes, so a second pass reads its own
+    buckets. Flattening across all scenes keeps every line."""
+    from kids_story_pipeline import nodes
+    from kids_story_pipeline.state import Line, Scene
+
+    lines = [Line(text=f"Short line {i}.", role="narrator") for i in range(8)]
+
+    class SplitLLM:
+        def complete_json(self, system, prompt):
+            n = len(prompt.strip().splitlines())
+            return {"scenes": [
+                {"title": "a", "line_start": 0, "image_prompt": "p"},
+                {"title": "b", "line_start": n // 2, "image_prompt": "p"},
+            ]}
+
+    class P:
+        llm = SplitLLM()
+
+    state = PipelineState(run_id="sd2", story_text="x", profile_name="bedtime")
+    state.style_anchor = "style"
+    state.scenes = [Scene(id=0, title="__all__", lines=lines)]
+    assert nodes.scene_director(state, P(), fast_profile, tmp_path) == 1.0
+    # simulate gate pause -> resume: node runs again on its own output
+    assert nodes.scene_director(state, P(), fast_profile, tmp_path) == 1.0
+    assert sum(len(sc.lines) for sc in state.scenes) == len(lines)
+
+
 # ---- gate pause / resume ----------------------------------------------------
 
 def test_gate_pauses_and_resume_approves(fast_profile, tmp_path, monkeypatch):
