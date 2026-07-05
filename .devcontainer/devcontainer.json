@@ -1,0 +1,38 @@
+{
+    "name": "Claude Code Sandbox",
+
+    // Microsoft's official Node 22 dev container image. Includes Node, npm,
+    // git, common tools, and a non-root `node` user with sudo.
+    "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+
+    "remoteUser": "node",
+
+    // Reuse the same Docker volume name as the CLI setup, so your existing
+    // Claude Code OAuth login carries over and you don't have to re-auth.
+    "mounts": [
+        "source=claude-config,target=/home/node/.claude,type=volume"
+    ],
+
+    // Install Claude Code globally after the container is built.
+    // Runs once per container creation, not on every reopen.
+    "postCreateCommand": "sudo npm install -g @anthropic-ai/claude-code && sudo chown -R node:node /home/node/.claude",
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "anthropic.claude-code"
+            ],
+            "settings": {
+                "terminal.integrated.defaultProfile.linux": "bash"
+            }
+        }
+    },
+
+    // Useful tools installed via Dev Container Features.
+    "features": {
+        "ghcr.io/devcontainers/features/common-utils:2": {
+            "installZsh": false,
+            "configureZshAsDefaultShell": false
+        }
+    }
+}
