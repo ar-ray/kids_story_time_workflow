@@ -26,6 +26,16 @@ class MissingKeyError(RuntimeError):
     pass
 
 
+def _raise_for_status(resp) -> None:
+    """Like requests' raise_for_status, but with the response body in the
+    message — provider error bodies carry the actionable detail (quota
+    exhausted, billing required, plan restrictions...)."""
+    if resp.status_code >= 400:
+        body = (resp.text or "").strip()[:300]
+        raise requests.HTTPError(
+            f"{resp.status_code} error for {resp.url}: {body}", response=resp)
+
+
 def _key(name: str) -> str:
     val = os.environ.get(name)
     if not val:
@@ -58,7 +68,7 @@ class AnthropicLLM(LLMProvider):
             },
             timeout=120,
         )
-        resp.raise_for_status()
+        _raise_for_status(resp)
         text = "".join(b.get("text", "") for b in resp.json()["content"]
                        if b.get("type") == "text")
         text = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```")
@@ -103,7 +113,7 @@ class GeminiImages(ImageProvider):
             },
             timeout=300,
         )
-        resp.raise_for_status()
+        _raise_for_status(resp)
         for cand in resp.json().get("candidates", []):
             for part in cand.get("content", {}).get("parts", []):
                 data = part.get("inlineData") or part.get("inline_data")
@@ -137,7 +147,7 @@ class KlingVideo(VideoProvider):
                   "generate_audio": False},
             timeout=60,
         )
-        submit.raise_for_status()
+        _raise_for_status(submit)
         status_url = submit.json()["status_url"]
         response_url = submit.json()["response_url"]
         deadline = time.time() + 900
@@ -174,7 +184,7 @@ class ElevenLabsAudio(AudioProvider):
         voices via the API but NOT library voices (402 paid_plan_required)."""
         resp = requests.get(f"{self.BASE}/voices", headers=self._headers(),
                             timeout=60)
-        resp.raise_for_status()
+        _raise_for_status(resp)
         for v in resp.json().get("voices", []):
             if v.get("category") == "premade":
                 return v["voice_id"]
@@ -190,7 +200,7 @@ class ElevenLabsAudio(AudioProvider):
                                      "style": 0.15, "speed": 0.85}},
             timeout=300,
         )
-        resp.raise_for_status()
+        _raise_for_status(resp)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(resp.content)
         return out
@@ -203,7 +213,7 @@ class ElevenLabsAudio(AudioProvider):
                   "duration_seconds": max(0.5, min(30.0, duration_s))},
             timeout=300,
         )
-        resp.raise_for_status()
+        _raise_for_status(resp)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(resp.content)
         return out
@@ -217,7 +227,7 @@ class ElevenLabsAudio(AudioProvider):
                                                    int(duration_s * 1000)))},
             timeout=600,
         )
-        resp.raise_for_status()
+        _raise_for_status(resp)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(resp.content)
         return out

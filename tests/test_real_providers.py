@@ -17,15 +17,16 @@ from kids_story_pipeline import smoke
 
 
 class FakeResponse:
-    def __init__(self, payload=None, content=b""):
+    def __init__(self, payload=None, content=b"", status_code=200,
+                 text="", url="https://api.example/x"):
         self._payload = payload
         self.content = content
+        self.status_code = status_code
+        self.text = text
+        self.url = url
 
     def json(self):
         return self._payload
-
-    def raise_for_status(self):
-        pass
 
 
 @pytest.fixture()
@@ -34,6 +35,17 @@ def profile(monkeypatch):
                 "ELEVENLABS_API_KEY", "FAL_KEY"):
         monkeypatch.setenv(key, f"test-{key.lower()}")
     return load_profile("bedtime")
+
+
+def test_http_errors_carry_response_body():
+    """Bare '403 Forbidden' hides the actionable detail (billing, quota...)
+    — the raised error must include the provider's response body."""
+    import requests as _requests
+    resp = FakeResponse(status_code=403,
+                        text='{"detail":"User is locked. Exhausted balance."}')
+    with pytest.raises(_requests.HTTPError, match="Exhausted balance"):
+        real._raise_for_status(resp)
+    real._raise_for_status(FakeResponse(status_code=200))  # no raise
 
 
 # ---- Anthropic ---------------------------------------------------------------
