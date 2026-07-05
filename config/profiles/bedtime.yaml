@@ -1,0 +1,40 @@
+# Bedtime profile — primary channel identity (ages 4-8, calm, Milo-style)
+target_age: "4-8"
+wpm: 105
+line_pause_s: 0.35
+scene_pause_s: 0.6
+crossfade_s: 1.2
+outro_s: 20.0
+fps: 25
+width: 1280
+height: 720
+hero_scene_count: 4
+max_reading_grade: 3.2
+gate_threshold: 0.75
+gate_enabled: true
+music_gain: 0.10
+shorts_max_s: 60.0
+llm_model: "claude-sonnet-4-6"
+image_model: "gemini-3-pro-image-preview"   # Nano Banana Pro — verify current id before real runs
+video_model: "fal-ai/kling-video/v3/standard/image-to-video"
+style_anchor: >-
+  storybook illustration, soft watercolor and gouache, deep blue and warm gold
+  night palette, gentle glow, cozy dreamy atmosphere, children's book art,
+  painterly texture
+character_anchor: >-
+  a young child with curly dark hair, round friendly face, mustard-yellow
+  pajama set and red slippers
+scary_words:
+  - blood
+  - monster
+  - dead
+  - death
+  - scream
+  - knife
+  - gun
+  - nightmare
+  - demon
+  - ghost
+voices:
+  narrator: "REPLACE_WITH_ELEVENLABS_VOICE_ID"     # warm, low-energy (e.g. audition Matilda/George)
+  conductor: "REPLACE_WITH_SECOND_VOICE_ID"

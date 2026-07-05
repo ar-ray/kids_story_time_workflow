@@ -1,0 +1,13 @@
+# Adventure profile — stub for ages 8-12 mode (v2). Faster pace, more heroes.
+target_age: "8-12"
+wpm: 135
+crossfade_s: 0.7
+outro_s: 8.0
+hero_scene_count: 8
+max_reading_grade: 5.5
+gate_threshold: 0.75
+music_gain: 0.14
+llm_model: "claude-sonnet-4-6"
+image_model: "gemini-3-pro-image-preview"
+video_model: "fal-ai/kling-video/v3/standard/image-to-video"
+scary_words: [blood, gun, knife, demon]
