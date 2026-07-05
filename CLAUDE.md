@@ -9,6 +9,8 @@ be marked "Made for Kids" / COPPA when uploaded).
 - Test (offline, always run before committing): `PYTHONPATH=src python -m pytest tests/ -q`
 - Mock run (free, no keys): `PYTHONPATH=src python -m kids_story_pipeline run --story examples/sample_story.txt --mock`
 - Env check: `PYTHONPATH=src python -m kids_story_pipeline doctor`
+- Key smoke test (REAL paid calls, one tiny call per provider):
+  `PYTHONPATH=src python -m kids_story_pipeline smoke [--only llm,image,tts,video]`
 - Resume a paused run: `PYTHONPATH=src python -m kids_story_pipeline resume <RUN_ID> --approve`
 
 ## Architecture
@@ -30,10 +32,10 @@ be marked "Made for Kids" / COPPA when uploaded).
 - Ask clarifying questions when a task is ambiguous; always test before commit
 
 ## Pending / known gaps (good first tasks)
-1. `providers/real.py` is UNTESTED against live APIs — verify endpoints/model
-   ids against current docs before first paid run (links in README), then add
-   a `--smoke` mode that makes one tiny real call per provider
+1. Run `smoke` against live keys (endpoints/model ids were doc-verified
+   2026-07 and unit-tested offline, but no live call has been made yet)
 2. Set two ElevenLabs voice ids in `config/profiles/bedtime.yaml`
+   (`smoke` falls back to a premade voice until then)
 3. v2 roadmap: vision-LLM QC with auto re-roll (hard-reject uncanny faces),
    per-scene SFX buses, read-along captions, 40-min compilation builder,
    LangGraph migration when branching lands

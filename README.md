@@ -59,15 +59,24 @@ PYTHONPATH=src python -m kids_story_pipeline run --story my_story.txt
 | Kling image-to-video via fal.ai | hero-scene animation | `FAL_KEY` |
 | ElevenLabs | narration (multi-voice), SFX, music (monetization-safe licensing) | `ELEVENLABS_API_KEY` |
 
-⚠️ **Before your first paid run:** the real clients in
-`src/kids_story_pipeline/providers/real.py` are written against provider docs
-as of mid-2026 but are **not exercised by CI** (tests are offline by design).
-Verify model ids/endpoints — they churn:
+⚠️ **Before your first paid run:** endpoints/model ids in
+`src/kids_story_pipeline/providers/real.py` were verified against provider
+docs **2026-07**, but live APIs are **not exercised by CI** (tests are
+offline by design). Confirm your keys with one tiny paid call per provider:
+
+```bash
+PYTHONPATH=src python -m kids_story_pipeline smoke              # all four
+PYTHONPATH=src python -m kids_story_pipeline smoke --only llm,tts  # subset
+```
+
+(~cents for llm/tts, ~$0.15 for the image, tens of cents for the 3 s video
+clip; artifacts land in `runs/smoke-<timestamp>/`.) If providers churn again:
 Anthropic <https://docs.claude.com/en/api/overview> ·
 Gemini images <https://ai.google.dev/gemini-api/docs/image-generation> ·
 ElevenLabs <https://elevenlabs.io/docs/api-reference> ·
 fal/Kling <https://fal.ai/models>. Also set the two ElevenLabs voice ids in
-`config/profiles/bedtime.yaml`.
+`config/profiles/bedtime.yaml` (until then, `smoke` falls back to a premade
+voice for the tts check and warns).
 
 Typical real-mode cost: **~$8–15/video** (hero animation dominates), plus the
 ElevenLabs subscription.
