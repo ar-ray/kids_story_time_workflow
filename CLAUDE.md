@@ -32,12 +32,9 @@ be marked "Made for Kids" / COPPA when uploaded).
 - Ask clarifying questions when a task is ambiguous; always test before commit
 
 ## Pending / known gaps (good first tasks)
-1. Account billing blocks the last two smoke checks (code paths verified,
-   llm+tts passed live 2026-07-05): Gemini image gen has zero free-tier
-   quota — enable billing on the Google AI Studio project; the fal.ai
-   account is locked with exhausted balance — top up at
-   fal.ai/dashboard/billing, then rerun
-   `... smoke --only image,video`
-3. v2 roadmap: vision-LLM QC with auto re-roll (hard-reject uncanny faces),
+1. All four providers passed live smoke 2026-07-05 (llm, image, tts, video) —
+   but the pipeline has NOT yet done a full real-mode run end to end
+   (`run --story examples/sample_story.txt` without `--mock`, ~$8-15)
+2. v2 roadmap: vision-LLM QC with auto re-roll (hard-reject uncanny faces),
    per-scene SFX buses, read-along captions, 40-min compilation builder,
    LangGraph migration when branching lands

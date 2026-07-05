@@ -77,8 +77,10 @@ ElevenLabs <https://elevenlabs.io/docs/api-reference> ·
 fal/Kling <https://fal.ai/models>. Voice ids in `config/profiles/bedtime.yaml`
 ship with ElevenLabs premade voices (George/Matilda) — free plans can use
 premade voices via the API, but **not** library voices (402
-`paid_plan_required`). Gemini image generation has **no free-tier quota**;
-enable billing on the Google AI Studio project first.
+`paid_plan_required`). Gemini image generation has **no free-tier quota** —
+the key must belong to a billing-enabled Google AI Studio project. Kling
+rejects input images smaller than 300×300. All four checks passed live
+2026-07-05.
 
 Typical real-mode cost: **~$8–15/video** (hero animation dominates), plus the
 ElevenLabs subscription.
