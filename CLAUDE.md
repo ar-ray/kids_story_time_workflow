@@ -32,9 +32,12 @@ be marked "Made for Kids" / COPPA when uploaded).
 - Ask clarifying questions when a task is ambiguous; always test before commit
 
 ## Pending / known gaps (good first tasks)
-1. Gemini image gen needs billing enabled on the Google AI Studio project —
-   the API free tier has zero image quota (`limit: 0`), so the image/video
-   smoke checks stay red until then (llm+tts verified live 2026-07-05)
+1. Account billing blocks the last two smoke checks (code paths verified,
+   llm+tts passed live 2026-07-05): Gemini image gen has zero free-tier
+   quota — enable billing on the Google AI Studio project; the fal.ai
+   account is locked with exhausted balance — top up at
+   fal.ai/dashboard/billing, then rerun
+   `... smoke --only image,video`
 3. v2 roadmap: vision-LLM QC with auto re-roll (hard-reject uncanny faces),
    per-scene SFX buses, read-along captions, 40-min compilation builder,
    LangGraph migration when branching lands
