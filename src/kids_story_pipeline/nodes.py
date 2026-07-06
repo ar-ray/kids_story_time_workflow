@@ -202,12 +202,15 @@ def animate(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) ->
             ff.normalize_clip(raw, out, size=prof.size, fps=prof.fps)
             # hero models cap at short clips; hold the last look via kenburns if short
             if ff.probe_duration(out) < dur - 0.5:
+                fade = min(0.8, prof.crossfade_s)
                 tail = clips_dir / f"scene_{sc.id:02d}_tail.mp4"
+                # + fade: the join overlaps by fade_s, so the tail must be
+                # longer by exactly that much for the clip to land on dur
                 ff.make_kenburns_clip(Path(sc.image_path),
-                                      dur - ff.probe_duration(out), tail,
-                                      size=prof.size, fps=prof.fps)
+                                      dur - ff.probe_duration(out) + fade,
+                                      tail, size=prof.size, fps=prof.fps)
                 joined = clips_dir / f"scene_{sc.id:02d}_joined.mp4"
-                ff.xfade_concat([out, tail], joined, fade_s=min(0.8, prof.crossfade_s))
+                ff.xfade_concat([out, tail], joined, fade_s=fade)
                 out = joined
         else:
             ff.make_kenburns_clip(Path(sc.image_path), dur, out,

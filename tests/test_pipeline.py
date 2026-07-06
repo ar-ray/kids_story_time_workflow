@@ -184,6 +184,37 @@ def test_animate_resume_skips_downloaded_hero_clips(fast_profile, tmp_path):
     assert calls["n"] == 1
 
 
+def test_animate_hero_tail_lands_on_exact_duration(fast_profile, tmp_path):
+    """When the hero render is shorter than the narration, the kenburns tail
+    plus inner crossfade must land exactly on audio + scene crossfade —
+    otherwise every hero scene shortens the video and drifts A/V sync."""
+    from PIL import Image
+    from kids_story_pipeline import nodes
+    from kids_story_pipeline.state import Line, Scene
+
+    img = tmp_path / "scene.png"
+    Image.new("RGB", (640, 360), (20, 30, 60)).save(img)
+    state = PipelineState(run_id="ht", story_text="x", profile_name="bedtime")
+    sc = Scene(id=0, title="hero", lines=[Line(text="hi", role="narrator")],
+               is_hero=True)
+    sc.image_path = str(img)
+    sc.audio_duration_s = 6.0
+    state.scenes = [sc]
+
+    class ShortVideo:  # renders only 2s of the needed 6.5s
+        def animate(self, image, motion_prompt, duration_s, out):
+            ff.make_kenburns_clip(image, 2.0, out, size=(640, 360), fps=12)
+            return out
+
+    class P:
+        video = ShortVideo()
+
+    nodes.animate(state, P(), fast_profile, tmp_path)
+    expected = 6.0 + fast_profile.crossfade_s
+    assert ff.probe_duration(state.scenes[0].clip_path) == pytest.approx(
+        expected, abs=0.3)
+
+
 def test_total_minutes_rounds_full_video_length(fast_profile):
     """101s narration + outro must label as 2 min, not floor to 1."""
     from kids_story_pipeline import nodes
