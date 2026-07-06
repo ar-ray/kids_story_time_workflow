@@ -184,6 +184,20 @@ def test_animate_resume_skips_downloaded_hero_clips(fast_profile, tmp_path):
     assert calls["n"] == 1
 
 
+def test_total_minutes_rounds_full_video_length(fast_profile):
+    """101s narration + outro must label as 2 min, not floor to 1."""
+    from kids_story_pipeline import nodes
+    from kids_story_pipeline.state import Scene
+    prof = load_profile("bedtime")          # 20s outro
+    state = PipelineState(run_id="m", story_text="x", profile_name="bedtime")
+    sc = Scene(id=0, title="s", lines=[])
+    sc.audio_duration_s = 101.3
+    state.scenes = [sc]
+    assert nodes._total_minutes(state, prof) == 2
+    sc.audio_duration_s = 5.0               # tiny video still says 1 min
+    assert nodes._total_minutes(state, prof) == 1
+
+
 # ---- gate pause / resume ----------------------------------------------------
 
 def test_gate_pauses_and_resume_approves(fast_profile, tmp_path, monkeypatch):

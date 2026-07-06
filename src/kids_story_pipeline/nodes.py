@@ -268,7 +268,7 @@ def thumbnail(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) 
     with Image.open(base) as im:
         im = im.convert("RGB")
         d = ImageDraw.Draw(im)
-        label = f"{state.title}  ({'~' + str(int(_total_minutes(state))) + ' min'})"
+        label = f"{state.title}  ({'~' + str(_total_minutes(state, prof)) + ' min'})"
         d.rectangle([0, prof.height - 90, prof.width, prof.height],
                     fill=(18, 22, 44))
         d.text((30, prof.height - 65), label[:70], fill=(240, 236, 210))
@@ -282,7 +282,7 @@ def package_meta(state: PipelineState, p: Providers, prof: Profile, run_dir: Pat
         "PACKAGE_TASK: Write a warm 2-3 sentence YouTube description and 5-8 "
         'tags for a kids bedtime story video. JSON: {"description": str, "tags": [str]}',
         f"Title: {state.title}\nRefrain: {state.refrain}")
-    minutes = int(_total_minutes(state))
+    minutes = _total_minutes(state, prof)
     meta = {
         "title": f"{state.title} 🌙 Calming Bedtime Story for Kids ({minutes} min)",
         "description": result.get("description", "") +
@@ -299,8 +299,10 @@ def package_meta(state: PipelineState, p: Providers, prof: Profile, run_dir: Pat
     return 1.0
 
 
-def _total_minutes(state: PipelineState) -> float:
-    return sum(sc.audio_duration_s for sc in state.scenes) / 60.0
+def _total_minutes(state: PipelineState, prof: Profile) -> int:
+    """Rounded length of the final video (narration + outro), min 1."""
+    total_s = sum(sc.audio_duration_s for sc in state.scenes) + prof.outro_s
+    return max(1, round(total_s / 60.0))
 
 
 # Ordered graph. gated=True nodes can pause the run on low confidence.
