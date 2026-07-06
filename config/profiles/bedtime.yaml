@@ -35,6 +35,7 @@ scary_words:
   - nightmare
   - demon
   - ghost
+tts_speed: 0.85        # ElevenLabs speed multiplier (0.7-1.2); lower = sleepier
 voices:
   narrator: "JBFqnCBsd6RMkjVDRZzb"    # George — warm, captivating storyteller (ElevenLabs premade)
   conductor: "XrExE9yKIg1WjnnlVkGX"   # Matilda — knowledgeable, professional (ElevenLabs premade)

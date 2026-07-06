@@ -227,6 +227,8 @@ def test_elevenlabs_tts_endpoint_and_settings(profile, tmp_path, monkeypatch):
     assert captured["url"].endswith(f"/v1/text-to-speech/{raw_id}")
     assert captured["headers"]["xi-api-key"] == "test-elevenlabs_api_key"
     assert captured["body"]["model_id"] == "eleven_multilingual_v2"
+    # pacing comes from the profile (tts_speed), defaulting to 0.85
+    assert captured["body"]["voice_settings"]["speed"] == 0.85
     assert out.read_bytes() == b"speech-bytes"
 
 

@@ -205,6 +205,7 @@ class ElevenLabsAudio(AudioProvider):
     def __init__(self, profile):
         self.api_key = _key("ELEVENLABS_API_KEY")
         self.voices = profile.voices or {}
+        self.speed = float((profile.raw or {}).get("tts_speed", 0.85))
 
     def _headers(self) -> dict:
         return {"xi-api-key": self.api_key}
@@ -238,7 +239,7 @@ class ElevenLabsAudio(AudioProvider):
             headers=self._headers(),
             json={"text": text, "model_id": "eleven_multilingual_v2",
                   "voice_settings": {"stability": 0.65, "similarity_boost": 0.8,
-                                     "style": 0.15, "speed": 0.85}},
+                                     "style": 0.15, "speed": self.speed}},
             timeout=300,
         )
         _raise_for_status(resp)
