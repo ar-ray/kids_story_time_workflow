@@ -149,6 +149,41 @@ def test_scene_director_rerun_after_pause_keeps_all_lines(fast_profile,
     assert sum(len(sc.lines) for sc in state.scenes) == len(lines)
 
 
+def test_animate_resume_skips_downloaded_hero_clips(fast_profile, tmp_path):
+    """Hero renders are paid — a resume after a mid-node crash must not
+    re-render clips whose raw file already landed on disk."""
+    from PIL import Image
+    from kids_story_pipeline import nodes
+    from kids_story_pipeline.state import Line, Scene
+
+    img = tmp_path / "scene.png"
+    Image.new("RGB", (320, 180), (20, 30, 60)).save(img)
+    state = PipelineState(run_id="an", story_text="x", profile_name="bedtime")
+    sc = Scene(id=0, title="hero", lines=[Line(text="hi", role="narrator")],
+               is_hero=True)
+    sc.image_path = str(img)
+    sc.audio_duration_s = 2.0
+    state.scenes = [sc]
+
+    calls = {"n": 0}
+
+    class CountingVideo:
+        def animate(self, image, motion_prompt, duration_s, out):
+            calls["n"] += 1
+            ff.make_kenburns_clip(image, duration_s, out,
+                                  size=(320, 180), fps=12)
+            return out
+
+    class P:
+        video = CountingVideo()
+
+    nodes.animate(state, P(), fast_profile, tmp_path)
+    assert calls["n"] == 1
+    # crash-resume: raw exists, provider must not be called again
+    nodes.animate(state, P(), fast_profile, tmp_path)
+    assert calls["n"] == 1
+
+
 # ---- gate pause / resume ----------------------------------------------------
 
 def test_gate_pauses_and_resume_approves(fast_profile, tmp_path, monkeypatch):

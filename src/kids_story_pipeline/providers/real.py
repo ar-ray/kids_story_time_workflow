@@ -183,8 +183,20 @@ class KlingVideo(VideoProvider):
             raise RuntimeError(f"Kling returned no video: {str(result)[:300]}")
         video_url = result["video"]["url"]
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(requests.get(video_url, timeout=300).content)
-        return out
+        # the rendered clip is already paid for — retry a flaky download
+        # (~27MB transfers can die with ChunkedEncodingError mid-stream)
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                out.write_bytes(requests.get(video_url, timeout=300).content)
+                return out
+            except (requests.exceptions.ChunkedEncodingError,
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.Timeout) as exc:
+                last_exc = exc
+                time.sleep(5 * (attempt + 1))
+        raise RuntimeError(
+            f"Kling clip download failed after 3 attempts: {last_exc}")
 
 
 class ElevenLabsAudio(AudioProvider):

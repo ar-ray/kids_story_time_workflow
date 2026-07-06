@@ -186,8 +186,11 @@ def animate(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) ->
         out = clips_dir / f"scene_{sc.id:02d}.mp4"
         if sc.is_hero:
             raw = clips_dir / f"scene_{sc.id:02d}_hero_raw.mp4"
-            p.video.animate(Path(sc.image_path), f"gentle slow motion, {sc.title}",
-                            dur, raw)
+            # hero renders are the expensive step — never re-pay for a clip
+            # that a previous (crashed/paused) attempt already downloaded
+            if not raw.exists() or raw.stat().st_size == 0:
+                p.video.animate(Path(sc.image_path),
+                                f"gentle slow motion, {sc.title}", dur, raw)
             ff.normalize_clip(raw, out, size=prof.size, fps=prof.fps)
             # hero models cap at short clips; hold the last look via kenburns if short
             if ff.probe_duration(out) < dur - 0.5:

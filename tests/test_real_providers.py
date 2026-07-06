@@ -145,6 +145,39 @@ def test_kling_payload_schema_and_duration_clamp(profile, tmp_path,
     assert out.read_bytes() == b"fake-mp4-bytes"
 
 
+def test_kling_download_retries_flaky_connection(profile, tmp_path,
+                                                 monkeypatch):
+    captured = {}
+    attempts = {"n": 0}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        captured.update(body=json)
+        return FakeResponse(payload={
+            "status_url": "https://queue.fal.run/x/status",
+            "response_url": "https://queue.fal.run/x/response"})
+
+    def fake_get(url, headers=None, timeout=None):
+        if url.endswith("/status"):
+            return FakeResponse(payload={"status": "COMPLETED"})
+        if url.endswith("/response"):
+            return FakeResponse(payload={
+                "video": {"url": "https://cdn.fal.example/out.mp4"}})
+        attempts["n"] += 1
+        if attempts["n"] == 1:  # first download dies mid-stream
+            raise real.requests.exceptions.ChunkedEncodingError("broken")
+        return FakeResponse(content=b"mp4-bytes-after-retry")
+
+    monkeypatch.setattr(real.requests, "post", fake_post)
+    monkeypatch.setattr(real.requests, "get", fake_get)
+    monkeypatch.setattr(real.time, "sleep", lambda s: None)
+    img = tmp_path / "seed.png"
+    img.write_bytes(b"png")
+    out = tmp_path / "clip.mp4"
+    real.KlingVideo(profile).animate(img, "zoom", 5.0, out)
+    assert attempts["n"] == 2
+    assert out.read_bytes() == b"mp4-bytes-after-retry"
+
+
 # ---- ElevenLabs --------------------------------------------------------------
 
 def test_elevenlabs_sfx_and_music_clamp_durations(profile, tmp_path,
