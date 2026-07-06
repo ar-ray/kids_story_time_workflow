@@ -32,9 +32,9 @@ be marked "Made for Kids" / COPPA when uploaded).
 - Ask clarifying questions when a task is ambiguous; always test before commit
 
 ## Pending / known gaps (good first tasks)
-1. All four providers passed live smoke 2026-07-05 (llm, image, tts, video) —
-   but the pipeline has NOT yet done a full real-mode run end to end
-   (`run --story examples/sample_story.txt` without `--mock`, ~$8-15)
+1. First full real-mode run completed 2026-07-06 (run 20260705-221817-82d1b7,
+   "The Littlest Star", 110s + 60s short, all gates >= 0.9) — review the
+   output manually before publishing; publishing itself stays manual (COPPA)
 2. v2 roadmap: vision-LLM QC with auto re-roll (hard-reject uncanny faces),
    per-scene SFX buses, read-along captions, 40-min compilation builder,
    LangGraph migration when branching lands
