@@ -63,7 +63,12 @@ def scene_director(state: PipelineState, p: Providers, prof: Profile, run_dir: P
               "scenes for a bedtime video. Return JSON: {\"scenes\": [{\"title\": str, "
               "\"line_start\": int, \"line_end\": int, \"image_prompt\": str, "
               "\"sfx_prompt\": str}]} with contiguous, non-overlapping ranges "
-              "(line_end is EXCLUSIVE, python-slice style).")
+              "(line_end is EXCLUSIVE, python-slice style). "
+              "Each image_prompt must faithfully match the lighting, time of "
+              "day and mood the story describes in those lines — a dark room "
+              "stays dark, lit only by light sources the story mentions. Give "
+              "dialogue exchanges their own scene, with the speaking "
+              "characters visible in that scene's image_prompt.")
     result = p.llm.complete_json(system, numbered)
     # Chunk by consecutive line_starts only: models disagree on whether
     # line_end is inclusive or exclusive, and trusting it silently drops the
@@ -182,7 +187,10 @@ def animate(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) ->
     clips_dir = run_dir / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
     for sc in state.scenes:
-        dur = max(2.0, sc.audio_duration_s)
+        # pad every scene clip by one crossfade: xfade_concat overlaps clips
+        # by fade_s, so without padding the video track ends n_fades*fade_s
+        # before the narration and every scene drifts ahead of its audio
+        dur = max(2.0, sc.audio_duration_s) + prof.crossfade_s
         out = clips_dir / f"scene_{sc.id:02d}.mp4"
         if sc.is_hero:
             raw = clips_dir / f"scene_{sc.id:02d}_hero_raw.mp4"
@@ -217,13 +225,29 @@ def music(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> f
     return 1.0
 
 
+def _font(px: int):
+    from PIL import ImageFont
+    for path in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                 "/System/Library/Fonts/Supplemental/Arial Bold.ttf"):
+        try:
+            return ImageFont.truetype(path, px)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
 def assemble(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> float:
-    # outro card
+    # outro card — large, centered text (PIL's default font is ~11px)
     card = run_dir / "assets" / "outro.png"
     img = Image.new("RGB", prof.size, (18, 22, 44))
     d = ImageDraw.Draw(img)
-    d.text((prof.width // 2 - 80, prof.height // 2), "goodnight",
-           fill=(200, 200, 215))
+    font = _font(max(48, prof.height // 8))
+    text = "good night"
+    box = d.textbbox((0, 0), text, font=font)
+    d.text(((prof.width - (box[2] - box[0])) // 2,
+            (prof.height - (box[3] - box[1])) // 2),
+           text, fill=(230, 224, 200), font=font)
     img.save(card)
     outro_clip = run_dir / "clips" / "outro.mp4"
     ff.make_kenburns_clip(card, prof.outro_s, outro_clip,
@@ -261,17 +285,22 @@ def shorts(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> 
 
 def thumbnail(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> float:
     base = run_dir / "assets" / "thumb_base.png"
-    p.images.generate(
-        f"{state.character_anchor}, cozy magical night scene, {state.style_anchor}, "
-        "thumbnail composition, large clear subject", base, size=prof.size)
+    if not base.exists() or base.stat().st_size == 0:  # keep paid asset on re-runs
+        p.images.generate(
+            f"{state.character_anchor}, cozy magical night scene, {state.style_anchor}, "
+            "thumbnail composition, large clear subject", base, size=prof.size)
     out = run_dir / "thumbnail.png"
     with Image.open(base) as im:
         im = im.convert("RGB")
         d = ImageDraw.Draw(im)
         label = f"{state.title}  ({'~' + str(_total_minutes(state, prof)) + ' min'})"
-        d.rectangle([0, prof.height - 90, prof.width, prof.height],
+        band_h = max(90, prof.height // 7)
+        font = _font(int(band_h * 0.45))
+        d.rectangle([0, prof.height - band_h, prof.width, prof.height],
                     fill=(18, 22, 44))
-        d.text((30, prof.height - 65), label[:70], fill=(240, 236, 210))
+        box = d.textbbox((0, 0), label[:70], font=font)
+        d.text((30, prof.height - band_h + (band_h - (box[3] - box[1])) // 2),
+               label[:70], fill=(240, 236, 210), font=font)
         im.save(out)
     state.thumbnail_path = str(out)
     return 1.0

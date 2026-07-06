@@ -234,10 +234,11 @@ def test_e2e_mock_produces_all_deliverables(fast_profile, tmp_path, monkeypatch)
     master = Path(state.master_video_path)
     assert master.exists() and sorted(ff.probe_streams(master)) == ["audio", "video"]
 
-    # video length tracks narration + outro (crossfades subtract a little)
+    # scene clips are padded by one crossfade each, so the xfade overlaps
+    # consume the padding and video length == narration + outro (A/V sync:
+    # every scene's visuals start exactly when its narration starts)
     narration = sum(sc.audio_duration_s for sc in state.scenes)
-    n_fades = len(state.scenes)  # scenes + outro joined with n fades
-    expected = narration + fast_profile.outro_s - n_fades * fast_profile.crossfade_s
+    expected = narration + fast_profile.outro_s
     assert ff.probe_duration(master) == pytest.approx(expected, abs=1.5)
 
     assert Path(state.shorts_path).exists()

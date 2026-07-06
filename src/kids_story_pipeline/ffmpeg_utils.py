@@ -40,12 +40,17 @@ def probe_streams(path: Path | str) -> list[str]:
 
 def make_kenburns_clip(image: Path, duration_s: float, out: Path,
                        size: tuple[int, int] = (1280, 720), fps: int = 25,
-                       zoom_rate: float = 0.0006, max_zoom: float = 1.08) -> Path:
-    """Silent H.264 clip from a still image with a slow center zoom."""
+                       zoom_rate: float = 0.0004, max_zoom: float = 1.06) -> Path:
+    """Silent H.264 clip from a still image with a slow center zoom.
+
+    zoompan quantizes its crop window to whole source pixels, which reads as
+    shake on slow zooms from a ~1080p source — supersample the input to 4x
+    the output width so each step is sub-output-pixel and the motion smooth.
+    """
     frames = max(1, int(round(duration_s * fps)))
     w, h = size
     vf = (
-        "scale=1920:-2,"
+        f"scale={w * 4}:-2,"
         f"zoompan=z='min(zoom+{zoom_rate},{max_zoom})':d={frames}"
         f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={w}x{h}:fps={fps},"
         "format=yuv420p"
