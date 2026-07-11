@@ -6,12 +6,16 @@ ages 4–8. Publishing is deliberately manual (stop before upload; videos must
 be marked "Made for Kids" / COPPA when uploaded).
 
 ## Commands
+(dev containers: python deps live in `.venv/` — use `.venv/bin/python`; keys
+load with `set -a; . ./.env; set +a`; never read or print `.env` contents)
 - Test (offline, always run before committing): `PYTHONPATH=src python -m pytest tests/ -q`
 - Mock run (free, no keys): `PYTHONPATH=src python -m kids_story_pipeline run --story examples/sample_story.txt --mock`
 - Env check: `PYTHONPATH=src python -m kids_story_pipeline doctor`
 - Key smoke test (REAL paid calls, one tiny call per provider):
   `PYTHONPATH=src python -m kids_story_pipeline smoke [--only llm,image,tts,video]`
-- Resume a paused run: `PYTHONPATH=src python -m kids_story_pipeline resume <RUN_ID> --approve`
+- Produce a video (REAL, ~$8-15, 15-40 min): `PYTHONPATH=src python -m kids_story_pipeline run --story my_story.txt`
+- Resume a paused/failed run: `PYTHONPATH=src python -m kids_story_pipeline resume <RUN_ID> --approve`
+  (gate pauses: inspect `runs/<id>/PENDING_APPROVAL.txt` + state.json notes BEFORE approving)
 
 ## Architecture
 - `src/kids_story_pipeline/nodes.py` — 14 linear nodes (NODES list at bottom is the graph)
@@ -30,11 +34,22 @@ be marked "Made for Kids" / COPPA when uploaded).
 - Never weaken the audience gate or scary-word list without asking the user
 - Style/character anchors must be appended to every image prompt (consistency)
 - Ask clarifying questions when a task is ambiguous; always test before commit
+- Never re-pay for landed assets: nodes skip provider calls when the artifact
+  already exists (hero raws, thumb base); resumes reuse everything cached
+- A/V sync invariant: scene clips are padded by one `crossfade_s` (hero tails
+  by their inner fade) so video length == narration + outro exactly — keep
+  this when touching animate/assemble, and keep the e2e duration assertion
+- When a gate pauses a real run, review state.json notes before approving —
+  every pause so far has flagged a real bug or content issue, not noise
 
-## Pending / known gaps (good first tasks)
-1. First full real-mode run completed 2026-07-06 (run 20260705-221817-82d1b7,
-   "The Littlest Star", 110s + 60s short, all gates >= 0.9) — review the
-   output manually before publishing; publishing itself stays manual (COPPA)
+## Status & pending
+Production-ready: first video ("The Littlest Star", run 20260705-221817)
+approved by the user 2026-07-11 after finishing fixes (A/V sync, smooth
+zoom, readable outro/thumbnail text). Publishing stays manual (COPPA).
+
+1. Scene-image lighting fidelity + dialogue-scene prompts are in
+   scene_director but have not yet produced a fresh video — spot-check the
+   next run's images against the story's lighting
 2. v2 roadmap: vision-LLM QC with auto re-roll (hard-reject uncanny faces),
    per-scene SFX buses, read-along captions, 40-min compilation builder,
    LangGraph migration when branching lands
