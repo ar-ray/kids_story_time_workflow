@@ -23,6 +23,7 @@ class Scene:
     lines: list[Line] = field(default_factory=list)
     image_prompt: str = ""
     sfx_prompt: str = ""
+    motion_prompt: str = ""         # action-faithful animation direction
     is_hero: bool = False           # hero scenes get image-to-video animation
     audio_path: Optional[str] = None
     audio_duration_s: float = 0.0   # padded narration duration for this scene

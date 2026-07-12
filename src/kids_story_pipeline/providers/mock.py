@@ -27,11 +27,14 @@ class MockLLM(LLMProvider):
     def __init__(self, profile):
         self.profile = profile
 
-    def complete_json(self, system: str, prompt: str) -> dict:
+    def complete_json(self, system: str, prompt: str, images=None) -> dict:
         if "SCRIPT_TASK" in system:
             return self._script(prompt)
         if "SCENE_TASK" in system:
             return self._scenes(prompt)
+        if "VISION_QC_TASK" in system:
+            return {"matches": True, "issues": [],
+                    "corrected_prompt": ""}
         if "PERSONA_TASK" in system:
             return {"kid_score": 0.92, "parent_score": 0.95,
                     "comments": ["mock persona review: cozy and clear"]}

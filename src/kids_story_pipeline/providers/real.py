@@ -53,7 +53,19 @@ class AnthropicLLM(LLMProvider):
         self.model = profile.llm_model
         self.api_key = _key("ANTHROPIC_API_KEY")
 
-    def complete_json(self, system: str, prompt: str) -> dict:
+    def complete_json(self, system: str, prompt: str,
+                      images: list[Path] | None = None) -> dict:
+        import base64
+        content: list[dict] | str
+        if images:
+            content = [{
+                "type": "image",
+                "source": {"type": "base64", "media_type": "image/png",
+                           "data": base64.b64encode(p.read_bytes()).decode()},
+            } for p in images]
+            content.append({"type": "text", "text": prompt})
+        else:
+            content = prompt
         resp = requests.post(
             self.URL,
             headers={
@@ -65,7 +77,7 @@ class AnthropicLLM(LLMProvider):
                 "model": self.model,
                 "max_tokens": 4000,
                 "system": system + "\nRespond with ONLY a valid JSON object.",
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": [{"role": "user", "content": content}],
             },
             timeout=120,
         )

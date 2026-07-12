@@ -7,8 +7,10 @@ from pathlib import Path
 
 class LLMProvider(ABC):
     @abstractmethod
-    def complete_json(self, system: str, prompt: str) -> dict:
-        """Return a JSON object from the model."""
+    def complete_json(self, system: str, prompt: str,
+                      images: list[Path] | None = None) -> dict:
+        """Return a JSON object from the model. `images` (optional PNG
+        paths) enables vision review; providers without vision ignore it."""
 
 
 class ImageProvider(ABC):
