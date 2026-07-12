@@ -1,0 +1,44 @@
+# Toddler profile — ages 2-6: shorter attention, simpler words, slower voice.
+# Style anchor stays storybook-watercolor but does NOT force a night palette,
+# so scene lighting can follow the story (daytime pond stays daytime).
+target_age: "2-6"
+wpm: 100
+line_pause_s: 0.45
+scene_pause_s: 0.8
+crossfade_s: 1.2
+outro_s: 15.0
+fps: 25
+width: 1280
+height: 720
+hero_scene_count: 4
+max_reading_grade: 2.5
+gate_threshold: 0.75
+gate_enabled: true
+music_gain: 0.10
+shorts_max_s: 60.0
+llm_model: "claude-sonnet-4-6"
+image_model: "gemini-3-pro-image"   # Nano Banana Pro — id verified 2026-07
+video_model: "fal-ai/kling-video/v3/standard/image-to-video"
+tts_speed: 0.75        # slower = sleepier; requested for ages 2-6
+style_anchor: >-
+  storybook illustration, soft watercolor and gouache, gentle glow, warm
+  cozy atmosphere, children's book art, painterly texture, rounded friendly
+  shapes
+# fallback only — script_agent derives the real anchor from each story's
+# main character (a turtle story gets a turtle, not this generic default)
+character_anchor: >-
+  a friendly storybook animal with big kind eyes and a gentle smile
+scary_words:
+  - blood
+  - monster
+  - dead
+  - death
+  - scream
+  - knife
+  - gun
+  - nightmare
+  - demon
+  - ghost
+voices:
+  narrator: "JBFqnCBsd6RMkjVDRZzb"    # George — warm, captivating storyteller (ElevenLabs premade)
+  conductor: "XrExE9yKIg1WjnnlVkGX"   # Matilda — knowledgeable, professional (ElevenLabs premade)
