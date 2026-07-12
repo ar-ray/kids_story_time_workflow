@@ -67,6 +67,27 @@ def test_anthropic_parses_fenced_json_and_sends_headers(profile, monkeypatch):
     assert captured["body"]["model"] == "claude-sonnet-4-6"
 
 
+def test_anthropic_vision_request_includes_image_blocks(profile, tmp_path,
+                                                        monkeypatch):
+    from PIL import Image
+    img = tmp_path / "scene.png"
+    Image.new("RGB", (8, 8), (1, 2, 3)).save(img)
+    captured = {}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        captured.update(body=json)
+        return FakeResponse(payload={"content": [
+            {"type": "text", "text": '{"matches": true}'}]})
+
+    monkeypatch.setattr(real.requests, "post", fake_post)
+    out = real.AnthropicLLM(profile).complete_json("sys", "check", images=[img])
+    assert out == {"matches": True}
+    content = captured["body"]["messages"][0]["content"]
+    assert content[0]["type"] == "image"
+    assert content[0]["source"]["media_type"] == "image/png"
+    assert content[-1] == {"type": "text", "text": "check"}
+
+
 # ---- Gemini images -----------------------------------------------------------
 
 def test_gemini_uses_header_auth_and_new_model_id(profile, tmp_path,

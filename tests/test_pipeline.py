@@ -284,6 +284,129 @@ def test_total_minutes_rounds_full_video_length(fast_profile):
     assert nodes._total_minutes(state, prof) == 1
 
 
+# ---- vision QC ---------------------------------------------------------------
+
+def _scene_with_image(tmp_path, sid=0, hero=False, size=(640, 360)):
+    from PIL import Image as PILImage
+    from kids_story_pipeline.state import Line, Scene
+    img = tmp_path / "assets" / f"scene_{sid:02d}.png"
+    img.parent.mkdir(parents=True, exist_ok=True)
+    PILImage.new("RGB", size, (20, 30, 60)).save(img)
+    sc = Scene(id=sid, title=f"s{sid}",
+               lines=[Line(text="Toby bit the stick.", role="narrator")],
+               is_hero=hero, image_prompt="old prompt, style")
+    sc.image_path = str(img)
+    sc.audio_duration_s = 2.0
+    return sc
+
+
+def test_vision_qc_rerolls_mismatched_image_and_invalidates_clip(
+        fast_profile, tmp_path):
+    """An image that shows the wrong action (holding vs biting) must be
+    re-rolled with the reviewer's corrected prompt, and that scene's stale
+    rendered clips deleted so animate re-renders them."""
+    from kids_story_pipeline import nodes
+
+    state = PipelineState(run_id="qc", story_text="x", profile_name="bedtime",
+                          mock=False)
+    state.style_anchor = "style"
+    state.scenes = [_scene_with_image(tmp_path, 0, hero=True),
+                    _scene_with_image(tmp_path, 1)]
+    stale = tmp_path / "clips" / "scene_00_hero_raw.mp4"
+    stale.parent.mkdir(parents=True, exist_ok=True)
+    stale.write_bytes(b"stale")
+    state.scenes[0].clip_path = str(stale)
+
+    calls = {"reviews": 0, "gens": 0}
+
+    class VisionLLM:
+        def complete_json(self, system, prompt, images=None):
+            assert "VISION_QC_TASK" in system and images
+            calls["reviews"] += 1
+            # scene 0 fails once (wrong action), passes after re-roll
+            if "scene_00" in str(images[0]) and calls["gens"] == 0:
+                return {"matches": False,
+                        "issues": ["turtle holds stick with flippers"],
+                        "corrected_prompt": "turtle hanging by MOUTH from stick"}
+            return {"matches": True, "issues": [], "corrected_prompt": ""}
+
+    class CountingImages:
+        def generate(self, prompt, out, reference=None, size=(640, 360)):
+            calls["gens"] += 1
+            from PIL import Image as PILImage
+            PILImage.new("RGB", (640, 360), (99, 0, 0)).save(out)
+            return out
+
+    class P:
+        llm = VisionLLM()
+        images = CountingImages()
+
+    conf = nodes.qc_visuals(state, P(), fast_profile, tmp_path)
+    assert calls["gens"] == 1                       # only scene 0 re-rolled
+    assert calls["reviews"] == 3                    # 0 fail, 0 pass, 1 pass
+    assert "hanging by MOUTH" in state.scenes[0].image_prompt
+    assert not stale.exists()                       # stale clip invalidated
+    assert state.scenes[0].clip_path is None
+    assert conf == 0.9                              # all pass -> capped at 0.9
+
+
+def test_vision_qc_skipped_in_mock_mode(fast_profile, tmp_path):
+    from kids_story_pipeline import nodes
+    state = PipelineState(run_id="qcm", story_text="x",
+                          profile_name="bedtime", mock=True)
+    state.scenes = [_scene_with_image(tmp_path, 0)]
+
+    class P:  # no llm/images at all — mock mode must not need them
+        pass
+
+    assert nodes.qc_visuals(state, P(), fast_profile, tmp_path) == 0.9
+
+
+def test_image_gen_skips_existing_images(fast_profile, tmp_path):
+    from kids_story_pipeline import nodes
+    state = PipelineState(run_id="ig", story_text="x", profile_name="bedtime")
+    state.scenes = [_scene_with_image(tmp_path, 0), _scene_with_image(tmp_path, 1)]
+    (tmp_path / "assets" / "scene_01.png").unlink()   # scene 1 missing
+
+    calls = {"gens": []}
+
+    class CountingImages:
+        def generate(self, prompt, out, reference=None, size=(640, 360)):
+            calls["gens"].append(out.name)
+            from PIL import Image as PILImage
+            PILImage.new("RGB", (64, 36), (0, 0, 0)).save(out)
+            return out
+
+    class P:
+        images = CountingImages()
+
+    conf = nodes.image_gen(state, P(), fast_profile, tmp_path)
+    assert calls["gens"] == ["scene_01.png"]          # existing not re-paid
+    assert conf == 1.0
+
+
+def test_animate_uses_scene_motion_prompt(fast_profile, tmp_path):
+    from kids_story_pipeline import nodes
+    state = PipelineState(run_id="mp", story_text="x", profile_name="bedtime")
+    sc = _scene_with_image(tmp_path, 0, hero=True)
+    sc.motion_prompt = "hangs by his mouth, flippers dangling, gentle sway"
+    state.scenes = [sc]
+    captured = {}
+
+    class CapturingVideo:
+        def animate(self, image, motion_prompt, duration_s, out):
+            captured["motion"] = motion_prompt
+            ff.make_kenburns_clip(image, duration_s, out,
+                                  size=(320, 180), fps=12)
+            return out
+
+    class P:
+        video = CapturingVideo()
+
+    nodes.animate(state, P(), fast_profile, tmp_path)
+    assert captured["motion"] == sc.motion_prompt
+
+
 # ---- gate pause / resume ----------------------------------------------------
 
 def test_gate_pauses_and_resume_approves(fast_profile, tmp_path, monkeypatch):
