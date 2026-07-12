@@ -47,9 +47,8 @@ Production-ready: first video ("The Littlest Star", run 20260705-221817)
 approved by the user 2026-07-11 after finishing fixes (A/V sync, smooth
 zoom, readable outro/thumbnail text). Publishing stays manual (COPPA).
 
-1. Scene-image lighting fidelity + dialogue-scene prompts are in
-   scene_director but have not yet produced a fresh video — spot-check the
-   next run's images against the story's lighting
-2. v2 roadmap: vision-LLM QC with auto re-roll (hard-reject uncanny faces),
-   per-scene SFX buses, read-along captions, 40-min compilation builder,
-   LangGraph migration when branching lands
+1. Vision QC reviews every scene image against its lines (action/lighting/
+   anatomy) and re-rolls once — but rendered CLIPS are not vision-reviewed
+   after animation; Kling can still invent wrong motion. Next gap.
+2. v2 roadmap: per-scene SFX buses, read-along captions, 40-min compilation
+   builder, LangGraph migration when branching lands

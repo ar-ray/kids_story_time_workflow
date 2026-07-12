@@ -135,11 +135,22 @@ Knobs you'll actually touch:
 PYTHONPATH=src python -m pytest tests/ -q
 ```
 
-33 tests, all offline: gate logic, xfade/A-V-sync duration math, mux stream
+41 tests, all offline: gate logic, xfade/A-V-sync duration math, mux stream
 integrity, gate pause→approve→resume, `--no-gate`, state round-trip, scene
-chunking + idempotent re-runs, hero-clip caching, the real-provider request
+chunking + idempotent re-runs, image/hero-clip caching, story-derived
+character anchor, vision-QC re-roll + clip invalidation (fake reviewer
+verdicts), scene motion prompts, delivery naming, the real-provider request
 schemas (monkeypatched `requests`), the smoke runner, and a full end-to-end
 mock run asserting all four deliverables.
+
+**Content-fidelity strategy (three layers):** (1) generation prompts demand
+the exact physical action, lighting and speaker per scene; (2) at runtime,
+`qc_visuals` sends every image + its narration lines to a vision LLM and
+re-rolls mismatches once with the reviewer's corrected prompt (stale clips
+invalidated automatically) — scoring below the gate threshold still pauses
+for a human; (3) the human watch-through before publishing stays the final
+check. Offline tests exercise layer 2's mechanics with fake verdicts; they
+can't judge real images — that's what the runtime reviewer and you are for.
 
 ## Design notes
 
@@ -158,8 +169,10 @@ mock run asserting all four deliverables.
 
 ## Roadmap (v2)
 
-- Vision-LLM QC on generated images/clips with auto re-roll (hard-reject
-  uncanny faces — critical for kids' content)
+- ~~Vision-LLM QC on generated images with auto re-roll~~ — shipped: every
+  scene image is reviewed against its narration lines (action, lighting,
+  anatomy) and re-rolled once on mismatch. Clips are not yet vision-reviewed
+  post-animation — that's the remaining piece
 - Per-scene SFX buses (single ambience bed today)
 - Read-along captions from ElevenLabs word timestamps (adventure mode)
 - Compilation builder (3–4 stories → 40-min sleep video)
