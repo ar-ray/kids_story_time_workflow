@@ -40,11 +40,19 @@ def script_agent(state: PipelineState, p: Providers, prof: Profile, run_dir: Pat
               f"words. Target US reading grade {prof.max_reading_grade} or "
               "below (Flesch-Kincaid) — this is checked by an automated gate. "
               "Use a soothing repeated refrain and gentle pacing. Tag dialogue "
-              "lines with the speaking character's role. Return JSON: "
-              '{"title": str, "refrain": str, "lines": [{"text": str, "role": str}]}')
+              "lines with the speaking character's role. Also describe the "
+              "story's main character visually in character_anchor (species, "
+              "colors, distinctive features — it anchors every illustration). "
+              "Return JSON: "
+              '{"title": str, "refrain": str, "character_anchor": str, '
+              '"lines": [{"text": str, "role": str}]}')
     result = p.llm.complete_json(system, "STORY:\n" + state.story_text)
     state.title = result.get("title", "A Sleepy Story")
     state.refrain = result.get("refrain", "")
+    # the story's own main character beats the profile's generic anchor
+    derived = (result.get("character_anchor") or "").strip()
+    if derived:
+        state.character_anchor = derived
     lines = [Line(**l) for l in result.get("lines", []) if l.get("text")]
     if not lines:
         return 0.0
