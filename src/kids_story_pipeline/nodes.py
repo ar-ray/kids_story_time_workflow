@@ -70,13 +70,18 @@ def scene_director(state: PipelineState, p: Providers, prof: Profile, run_dir: P
     system = ("SCENE_TASK: Split the numbered narration lines into 6-16 visual "
               "scenes for a bedtime video. Return JSON: {\"scenes\": [{\"title\": str, "
               "\"line_start\": int, \"line_end\": int, \"image_prompt\": str, "
-              "\"sfx_prompt\": str}]} with contiguous, non-overlapping ranges "
-              "(line_end is EXCLUSIVE, python-slice style). "
-              "Each image_prompt must faithfully match the lighting, time of "
-              "day and mood the story describes in those lines — a dark room "
-              "stays dark, lit only by light sources the story mentions. Give "
-              "dialogue exchanges their own scene, with the speaking "
-              "characters visible in that scene's image_prompt.")
+              "\"motion_prompt\": str, \"sfx_prompt\": str}]} with contiguous, "
+              "non-overlapping ranges (line_end is EXCLUSIVE, python-slice "
+              "style). Each image_prompt must faithfully match the lighting, "
+              "time of day and mood the story describes in those lines — a "
+              "dark room stays dark, lit only by light sources the story "
+              "mentions. Depict the EXACT physical action in those lines: "
+              "state explicitly who touches what and how (e.g. 'hanging by "
+              "his MOUTH biting the middle of the stick, flippers dangling "
+              "free' — never holding with hands/paws if the story says "
+              "biting). Give dialogue exchanges their own scene, with the "
+              "speaking characters visible. motion_prompt is one short "
+              "sentence of subtle animation faithful to that same action.")
     result = p.llm.complete_json(system, numbered)
     # Chunk by consecutive line_starts only: models disagree on whether
     # line_end is inclusive or exclusive, and trusting it silently drops the
@@ -96,6 +101,7 @@ def scene_director(state: PipelineState, p: Providers, prof: Profile, run_dir: P
         scenes.append(Scene(
             id=i, title=s.get("title", f"Scene {i + 1}"), lines=chunk,
             image_prompt=f"{s.get('image_prompt', '')}, {state.style_anchor}",
+            motion_prompt=s.get("motion_prompt", ""),
             sfx_prompt=s.get("sfx_prompt", "soft night ambience"),
         ))
     if not scenes:
@@ -151,16 +157,23 @@ def image_gen(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) 
     ok = 0
     for sc in state.scenes:
         out = run_dir / "assets" / f"scene_{sc.id:02d}.png"
-        p.images.generate(sc.image_prompt, out, reference=ref, size=prof.size)
+        # paid asset: only generate scenes whose image hasn't landed yet
+        # (resume after crash, or targeted re-rolls that deleted the file)
+        if not out.exists() or out.stat().st_size == 0:
+            p.images.generate(sc.image_prompt, out, reference=ref, size=prof.size)
         if out.exists() and out.stat().st_size > 0:
             sc.image_path = str(out)
             ok += 1
     return round(ok / len(state.scenes), 3)
 
 
+MAX_IMAGE_REROLLS = 1
+
+
 def qc_visuals(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> float:
-    """Mock: structural checks. Real mode: replace with a vision-LLM review
-    that hard-rejects uncanny faces / distorted figures (see README roadmap)."""
+    """Structural checks always; in real mode also a vision-LLM review of
+    every scene image against its narration lines, with one corrective
+    re-roll for images that don't depict the described action/setting."""
     bad = [sc.id for sc in state.scenes
            if not sc.image_path or not Path(sc.image_path).exists()]
     if bad:
@@ -170,7 +183,65 @@ def qc_visuals(state: PipelineState, p: Providers, prof: Profile, run_dir: Path)
         if im.size != prof.size:
             state.notes.append(f"qc_visuals: unexpected size {im.size}")
             return 0.6
-    return 0.9
+    if state.mock:
+        return 0.9
+    return min(0.9, _vision_review(state, p, prof, run_dir))
+
+
+def _vision_review(state: PipelineState, p: Providers, prof: Profile,
+                   run_dir: Path) -> float:
+    """Check each image tells its lines' story; re-roll mismatches once."""
+    ref = Path(state.character_ref_path) if state.character_ref_path else None
+    passed = 0
+    for sc in state.scenes:
+        verdict = {}
+        for attempt in range(MAX_IMAGE_REROLLS + 1):
+            verdict = _review_one(p, sc)
+            if verdict.get("matches"):
+                break
+            issues = "; ".join(verdict.get("issues", []))[:300]
+            state.notes.append(f"qc_visuals: scene {sc.id} mismatch: {issues}")
+            if attempt >= MAX_IMAGE_REROLLS:
+                break
+            corrected = (verdict.get("corrected_prompt") or "").strip()
+            if corrected:
+                sc.image_prompt = f"{corrected}, {state.style_anchor}"
+            p.images.generate(sc.image_prompt, Path(sc.image_path),
+                              reference=ref, size=prof.size)
+            _invalidate_clip(sc, run_dir)
+            state.notes.append(f"qc_visuals: scene {sc.id} re-rolled")
+        if verdict.get("matches"):
+            passed += 1
+    return round(passed / len(state.scenes), 3)
+
+
+def _review_one(p: Providers, sc) -> dict:
+    return p.llm.complete_json(
+        "VISION_QC_TASK: You are reviewing one illustration for a kids' "
+        "story video. Compare the image against the narration lines it "
+        "illustrates. Check: (1) the EXACT physical action matches — who "
+        "touches what and how (biting vs holding, sitting vs standing); "
+        "(2) setting/lighting match the lines; (3) no distorted anatomy, "
+        "extra limbs or uncanny faces. Minor artistic license is fine; "
+        "wrong action, wrong lighting or creepy rendering is not. Return "
+        'JSON: {"matches": bool, "issues": [str], "corrected_prompt": str} '
+        "— corrected_prompt is a full replacement image prompt that fixes "
+        "the issues (empty string if matches).",
+        f"NARRATION LINES:\n{sc.narration_text}\n\nIMAGE PROMPT USED:\n"
+        f"{sc.image_prompt}",
+        images=[Path(sc.image_path)],
+    )
+
+
+def _invalidate_clip(sc, run_dir: Path) -> None:
+    """A re-rolled image makes this scene's rendered clips stale."""
+    clips_dir = run_dir / "clips"
+    for stem in (f"scene_{sc.id:02d}", f"scene_{sc.id:02d}_hero_raw",
+                 f"scene_{sc.id:02d}_tail", f"scene_{sc.id:02d}_joined"):
+        f = clips_dir / f"{stem}.mp4"
+        if f.exists():
+            f.unlink()
+    sc.clip_path = None
 
 
 def voice(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> float:
@@ -205,8 +276,8 @@ def animate(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) ->
             # hero renders are the expensive step — never re-pay for a clip
             # that a previous (crashed/paused) attempt already downloaded
             if not raw.exists() or raw.stat().st_size == 0:
-                p.video.animate(Path(sc.image_path),
-                                f"gentle slow motion, {sc.title}", dur, raw)
+                motion = sc.motion_prompt or f"gentle slow motion, {sc.title}"
+                p.video.animate(Path(sc.image_path), motion, dur, raw)
             ff.normalize_clip(raw, out, size=prof.size, fps=prof.fps)
             # hero models cap at short clips; hold the last look via kenburns if short
             if ff.probe_duration(out) < dur - 0.5:
