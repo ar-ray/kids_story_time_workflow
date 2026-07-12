@@ -81,6 +81,61 @@ def test_mux_and_streams(tmp_path):
     assert sorted(ff.probe_streams(out)) == ["audio", "video"]
 
 
+def test_script_agent_derives_story_character_anchor(fast_profile, tmp_path):
+    """Images must suit the story: a turtle tale anchors on the turtle the
+    LLM describes, not the profile's generic default character."""
+    from kids_story_pipeline import nodes
+
+    class AnchorLLM:
+        def complete_json(self, system, prompt):
+            return {"title": "T", "refrain": "r",
+                    "character_anchor": "a small green turtle, round shell",
+                    "lines": [{"text": "Hi.", "role": "narrator"}]}
+
+    class NoAnchorLLM(AnchorLLM):
+        def complete_json(self, system, prompt):
+            d = AnchorLLM.complete_json(self, system, prompt)
+            d.pop("character_anchor")
+            return d
+
+    class P:
+        llm = AnchorLLM()
+
+    state = PipelineState(run_id="ca", story_text="word " * 40,
+                          profile_name="bedtime")
+    nodes.intake(state, P(), fast_profile, tmp_path)   # profile default
+    nodes.script_agent(state, P(), fast_profile, tmp_path)
+    assert state.character_anchor == "a small green turtle, round shell"
+
+    state2 = PipelineState(run_id="ca2", story_text="word " * 40,
+                           profile_name="bedtime")
+    P.llm = NoAnchorLLM()
+    nodes.intake(state2, P(), fast_profile, tmp_path)
+    nodes.script_agent(state2, P(), fast_profile, tmp_path)
+    assert state2.character_anchor  # falls back to the profile anchor
+
+
+def test_deliver_copies_video_named_after_story(tmp_path):
+    from kids_story_pipeline.cli import _deliver
+    master = tmp_path / "final.mp4"
+    master.write_bytes(b"vid")
+    outdir = tmp_path / "storyvideos"
+    dest = _deliver(master, outdir, "toby_the_turtle")
+    assert dest == outdir / "toby_the_turtle.mp4"
+    assert dest.read_bytes() == b"vid"
+    explicit = _deliver(master, tmp_path / "x" / "named.mp4", "ignored")
+    assert explicit.name == "named.mp4" and explicit.exists()
+
+
+def test_toddler_profile_loads_with_stricter_gate():
+    prof = load_profile("toddler")
+    assert prof.target_age == "2-6"
+    assert prof.max_reading_grade == 2.5      # stricter than bedtime's 3.2
+    assert prof.raw["tts_speed"] == 0.75
+    assert prof.voices["narrator"] and "REPLACE" not in prof.voices["narrator"]
+    assert prof.scary_words                    # safety list never empty
+
+
 # ---- scene director chunking --------------------------------------------------
 
 def test_scene_director_covers_all_lines_despite_inclusive_ends(
