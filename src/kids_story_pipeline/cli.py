@@ -24,6 +24,12 @@ def main(argv: list[str] | None = None) -> int:
     p_run = sub.add_parser("run", help="run the full pipeline on a story file")
     p_run.add_argument("--story", required=True, type=Path)
     p_run.add_argument("--profile", default="bedtime")
+    p_run.add_argument("--run-id", default=None,
+                       help="name the run folder (default: timestamp id); "
+                            "assets land in runs/<run-id>/")
+    p_run.add_argument("--out", type=Path, default=None,
+                       help="also copy the final video here (directory -> "
+                            "<story-stem>.mp4 inside it)")
     p_run.add_argument("--mock", action="store_true",
                        help="use mock providers (no API keys, no cost)")
     p_run.add_argument("--no-gate", action="store_true",
@@ -32,6 +38,9 @@ def main(argv: list[str] | None = None) -> int:
     p_res = sub.add_parser("resume", help="resume a paused/failed run")
     p_res.add_argument("run_id")
     p_res.add_argument("--profile", default="bedtime")
+    p_res.add_argument("--out", type=Path, default=None,
+                       help="also copy the final video here (directory -> "
+                            "<run-id>.mp4 inside it)")
     p_res.add_argument("--approve", action="store_true",
                        help="approve the pending gate and continue")
 
@@ -58,9 +67,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.cmd == "run":
             story = args.story.read_text()
-            state = start_run(story, profile, mock=args.mock)
+            state = start_run(story, profile, mock=args.mock,
+                              run_id=args.run_id)
+            stem = args.story.stem
         else:
             state = resume_run(args.run_id, profile, approve=args.approve)
+            stem = args.run_id
     except GatePaused as gp:
         print(f"⏸  {gp}", file=sys.stderr)
         return 2
@@ -70,7 +82,18 @@ def main(argv: list[str] | None = None) -> int:
     print(f"   shorts:    {state.shorts_path}")
     print(f"   thumbnail: {state.thumbnail_path}")
     print(f"   metadata:  {state.metadata_path}")
+    if args.out and state.master_video_path:
+        dest = _deliver(Path(state.master_video_path), args.out, stem)
+        print(f"   delivered: {dest}")
     return 0
+
+
+def _deliver(master: Path, out: Path, stem: str) -> Path:
+    """Copy the final video to `out` (a directory gets <stem>.mp4 inside)."""
+    dest = out / f"{stem}.mp4" if (out.is_dir() or not out.suffix) else out
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(master, dest)
+    return dest
 
 
 def _doctor() -> int:
