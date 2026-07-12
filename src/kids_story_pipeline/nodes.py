@@ -196,7 +196,7 @@ def _vision_review(state: PipelineState, p: Providers, prof: Profile,
     for sc in state.scenes:
         verdict = {}
         for attempt in range(MAX_IMAGE_REROLLS + 1):
-            verdict = _review_one(p, sc)
+            verdict = _review_one(p, sc, state)
             if verdict.get("matches"):
                 break
             issues = "; ".join(verdict.get("issues", []))[:300]
@@ -215,20 +215,26 @@ def _vision_review(state: PipelineState, p: Providers, prof: Profile,
     return round(passed / len(state.scenes), 3)
 
 
-def _review_one(p: Providers, sc) -> dict:
+def _review_one(p: Providers, sc, state: PipelineState) -> dict:
     return p.llm.complete_json(
         "VISION_QC_TASK: You are reviewing one illustration for a kids' "
         "story video. Compare the image against the narration lines it "
-        "illustrates. Check: (1) the EXACT physical action matches — who "
-        "touches what and how (biting vs holding, sitting vs standing); "
-        "(2) setting/lighting match the lines; (3) no distorted anatomy, "
-        "extra limbs or uncanny faces. Minor artistic license is fine; "
-        "wrong action, wrong lighting or creepy rendering is not. Return "
-        'JSON: {"matches": bool, "issues": [str], "corrected_prompt": str} '
+        "illustrates AND the full story (continuity: a mechanism the story "
+        "establishes anywhere — e.g. the character travels hanging by its "
+        "MOUTH from a stick — must hold in every scene that shows it, even "
+        "if this scene's lines don't repeat the detail). Check: (1) the "
+        "EXACT physical action — who touches what and how (biting vs "
+        "holding with limbs, sitting vs standing); (2) setting/lighting "
+        "match the lines; (3) no distorted anatomy, extra limbs or uncanny "
+        "faces. Minor artistic license is fine; a wrong action or mechanism, "
+        "wrong lighting or creepy rendering is not. Return JSON: "
+        '{"matches": bool, "issues": [str], "corrected_prompt": str} '
         "— corrected_prompt is a full replacement image prompt that fixes "
         "the issues (empty string if matches).",
-        f"NARRATION LINES:\n{sc.narration_text}\n\nIMAGE PROMPT USED:\n"
-        f"{sc.image_prompt}",
+        f"FULL STORY (for continuity):\n{state.story_text[:3000]}\n\n"
+        f"MAIN CHARACTER: {state.character_anchor}\n\n"
+        f"NARRATION LINES THIS IMAGE ILLUSTRATES:\n{sc.narration_text}\n\n"
+        f"IMAGE PROMPT USED:\n{sc.image_prompt}",
         images=[Path(sc.image_path)],
     )
 

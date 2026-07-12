@@ -322,6 +322,7 @@ def test_vision_qc_rerolls_mismatched_image_and_invalidates_clip(
     class VisionLLM:
         def complete_json(self, system, prompt, images=None):
             assert "VISION_QC_TASK" in system and images
+            assert "FULL STORY" in prompt        # continuity context present
             calls["reviews"] += 1
             # scene 0 fails once (wrong action), passes after re-roll
             if "scene_00" in str(images[0]) and calls["gens"] == 0:
