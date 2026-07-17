@@ -462,6 +462,40 @@ def test_animate_clip_qc_rerolls_drifted_hero_clip(fast_profile, tmp_path):
                for n in state.notes)
 
 
+def test_animate_clip_qc_accepts_minor_issues_without_paying(fast_profile,
+                                                             tmp_path):
+    """Expression/motion-phase nitpicks (action_exact=true, matches=false)
+    must NOT trigger a paid re-render — log and accept."""
+    from kids_story_pipeline import nodes
+
+    state = PipelineState(run_id="cqn", story_text="s " * 40,
+                          profile_name="bedtime", mock=False)
+    state.scenes = [_scene_with_image(tmp_path, 0, hero=True)]
+    calls = {"renders": 0}
+
+    class Video:
+        def animate(self, image, motion_prompt, duration_s, out):
+            calls["renders"] += 1
+            ff.make_kenburns_clip(image, 2.0, out, size=(320, 180), fps=12)
+            return out
+
+    class NitpickReviewer:
+        def complete_json(self, system, prompt, images=None):
+            return {"observed_action": "calm smile", "expected_action": "",
+                    "action_exact": True, "matches": False,
+                    "issues": ["expression should show surprise"],
+                    "corrected_prompt": ""}
+
+    class P:
+        video = Video()
+        llm = NitpickReviewer()
+
+    conf = nodes.animate(state, P(), fast_profile, tmp_path)
+    assert calls["renders"] == 1                    # no paid re-render
+    assert conf == 1.0                              # accepted, not failed
+    assert any("minor issues only" in n for n in state.notes)
+
+
 def test_cost_notes_report_generated_vs_reused(fast_profile, tmp_path):
     from kids_story_pipeline import nodes
     state = PipelineState(run_id="cost", story_text="x",

@@ -318,7 +318,21 @@ def animate(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) ->
                     rendered += 1
                 elif attempt == 0:
                     reused += 1
-                if state.mock or _clip_review_ok(p, sc, state, raw, run_dir):
+                if state.mock:
+                    break
+                v = _review_clip(p, sc, state, raw, run_dir)
+                if _verdict_ok(v):
+                    break
+                state.notes.append(
+                    f"animate: scene {sc.id} clip mismatch "
+                    f"(observed: {v.get('observed_action', '?')[:120]}): "
+                    + "; ".join(v.get("issues", []))[:200])
+                # COST GUARD: a re-render costs real money — pay only for
+                # broken mechanism/contact (action_exact false). Expression,
+                # motion-phase or lighting nits are logged and accepted.
+                if v.get("action_exact", True):
+                    state.notes.append(f"animate: scene {sc.id} clip minor "
+                                       "issues only — accepted, no re-render")
                     break
                 if attempt == 0:  # one paid re-render, with sharpened motion
                     raw.unlink()
@@ -355,8 +369,8 @@ def animate(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) ->
     return 1.0
 
 
-def _clip_review_ok(p: Providers, sc, state: PipelineState, raw: Path,
-                    run_dir: Path) -> bool:
+def _review_clip(p: Providers, sc, state: PipelineState, raw: Path,
+                 run_dir: Path) -> dict:
     """Review two extracted frames of a hero clip against the story."""
     qc_dir = run_dir / "qc"
     qc_dir.mkdir(parents=True, exist_ok=True)
@@ -365,18 +379,17 @@ def _clip_review_ok(p: Providers, sc, state: PipelineState, raw: Path,
     for tag, t in (("a", dur * 0.25), ("b", dur * 0.75)):
         frames.append(ff.extract_frame(
             raw, t, qc_dir / f"scene_{sc.id:02d}_{tag}.png"))
-    v = p.llm.complete_json(
+    return p.llm.complete_json(
         _QC_SYSTEM + " The images are FRAMES FROM THE ANIMATED CLIP for "
         "this scene — animation can drift from the approved source image, "
-        "so judge the frames themselves.",
+        "so judge the frames themselves. For clip frames judge ONLY: "
+        "(a) physical contact/mechanism between characters and objects, "
+        "(b) anatomy/extra limbs, (c) character identity. Do NOT fail for "
+        "facial expression, emotional beats, motion phase, or which instant "
+        "of the scene is shown — a clip passes through many moments and "
+        "these frames are arbitrary slices; set action_exact=false only "
+        "for genuine mechanism/contact violations.",
         _qc_context(state, sc), images=frames)
-    if _verdict_ok(v):
-        return True
-    state.notes.append(
-        f"animate: scene {sc.id} clip mismatch "
-        f"(observed: {v.get('observed_action', '?')[:120]}): "
-        + "; ".join(v.get("issues", []))[:200])
-    return False
 
 
 def music(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> float:
