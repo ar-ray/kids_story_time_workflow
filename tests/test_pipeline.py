@@ -408,6 +408,82 @@ def test_animate_uses_scene_motion_prompt(fast_profile, tmp_path):
     assert captured["motion"] == sc.motion_prompt
 
 
+def test_verdict_requires_action_exact():
+    """A lenient reviewer saying matches=true but action_exact=false must
+    still count as a mismatch (this exact leniency let a wrong-mechanism
+    image through in production)."""
+    from kids_story_pipeline import nodes
+    assert not nodes._verdict_ok({"matches": True, "action_exact": False})
+    assert nodes._verdict_ok({"matches": True, "action_exact": True})
+    assert not nodes._verdict_ok({"matches": False, "action_exact": True})
+
+
+def test_animate_clip_qc_rerolls_drifted_hero_clip(fast_profile, tmp_path):
+    """Frames of the animated hero clip are vision-reviewed; a drifted clip
+    is re-rendered ONCE with sharpened motion (paid — hard cap)."""
+    from kids_story_pipeline import nodes
+
+    state = PipelineState(run_id="cqc", story_text="s " * 40,
+                          profile_name="bedtime", mock=False)
+    state.style_anchor = "style"
+    sc = _scene_with_image(tmp_path, 0, hero=True)
+    sc.motion_prompt = "hangs by mouth"
+    state.scenes = [sc]
+
+    calls = {"renders": 0, "reviews": 0}
+
+    class DriftingThenGoodVideo:
+        def animate(self, image, motion_prompt, duration_s, out):
+            calls["renders"] += 1
+            ff.make_kenburns_clip(image, 2.0, out, size=(320, 180), fps=12)
+            return out
+
+    class ClipReviewer:
+        def complete_json(self, system, prompt, images=None):
+            assert "FRAMES FROM THE ANIMATED CLIP" in system
+            assert len(images) == 2
+            calls["reviews"] += 1
+            first = calls["reviews"] == 1
+            return {"observed_action": "turtle on top", "expected_action": "",
+                    "action_exact": not first, "matches": not first,
+                    "issues": ["drifted"] if first else [],
+                    "corrected_prompt": ""}
+
+    class P:
+        video = DriftingThenGoodVideo()
+        llm = ClipReviewer()
+
+    conf = nodes.animate(state, P(), fast_profile, tmp_path)
+    assert calls["renders"] == 2 and calls["reviews"] == 2
+    assert "CRITICAL: keep the exact physical contact" in sc.motion_prompt
+    assert conf == 1.0
+    assert any("clip re-rolled" in n for n in state.notes)
+    assert any("cost — hero rendered 2, reused 0, clip re-rolls 1" in n
+               for n in state.notes)
+
+
+def test_cost_notes_report_generated_vs_reused(fast_profile, tmp_path):
+    from kids_story_pipeline import nodes
+    state = PipelineState(run_id="cost", story_text="x",
+                          profile_name="bedtime")
+    state.scenes = [_scene_with_image(tmp_path, 0),
+                    _scene_with_image(tmp_path, 1)]
+    (tmp_path / "assets" / "scene_01.png").unlink()
+
+    class Images:
+        def generate(self, prompt, out, reference=None, size=(1, 1)):
+            from PIL import Image as PILImage
+            PILImage.new("RGB", (8, 8)).save(out)
+            return out
+
+    class P:
+        images = Images()
+
+    nodes.image_gen(state, P(), fast_profile, tmp_path)
+    assert any("image_gen: cost — generated 1, reused 1" in n
+               for n in state.notes)
+
+
 # ---- gate pause / resume ----------------------------------------------------
 
 def test_gate_pauses_and_resume_approves(fast_profile, tmp_path, monkeypatch):
