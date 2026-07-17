@@ -97,6 +97,12 @@ def xfade_concat(clips: list[Path], out: Path, fade_s: float = 1.2) -> Path:
     return out
 
 
+def extract_frame(video: Path, at_s: float, out: Path) -> Path:
+    _run([FFMPEG, "-y", "-ss", f"{max(0.0, at_s):.3f}", "-i", str(video),
+          "-frames:v", "1", str(out)])
+    return out
+
+
 def mux(video: Path, audio: Path, out: Path) -> Path:
     _run([FFMPEG, "-y", "-i", str(video), "-i", str(audio),
           "-map", "0:v", "-map", "1:a", "-c:v", "copy",

@@ -33,7 +33,8 @@ class MockLLM(LLMProvider):
         if "SCENE_TASK" in system:
             return self._scenes(prompt)
         if "VISION_QC_TASK" in system:
-            return {"matches": True, "issues": [],
+            return {"observed_action": "mock", "expected_action": "mock",
+                    "action_exact": True, "matches": True, "issues": [],
                     "corrected_prompt": ""}
         if "PERSONA_TASK" in system:
             return {"kid_score": 0.92, "parent_score": 0.95,

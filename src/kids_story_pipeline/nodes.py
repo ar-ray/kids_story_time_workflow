@@ -154,16 +154,21 @@ def character_ref(state: PipelineState, p: Providers, prof: Profile, run_dir: Pa
 
 def image_gen(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> float:
     ref = Path(state.character_ref_path) if state.character_ref_path else None
-    ok = 0
+    ok = generated = reused = 0
     for sc in state.scenes:
         out = run_dir / "assets" / f"scene_{sc.id:02d}.png"
         # paid asset: only generate scenes whose image hasn't landed yet
         # (resume after crash, or targeted re-rolls that deleted the file)
         if not out.exists() or out.stat().st_size == 0:
             p.images.generate(sc.image_prompt, out, reference=ref, size=prof.size)
+            generated += 1
+        else:
+            reused += 1
         if out.exists() and out.stat().st_size > 0:
             sc.image_path = str(out)
             ok += 1
+    state.notes.append(f"image_gen: cost — generated {generated}, "
+                       f"reused {reused}")
     return round(ok / len(state.scenes), 3)
 
 
@@ -192,15 +197,18 @@ def _vision_review(state: PipelineState, p: Providers, prof: Profile,
                    run_dir: Path) -> float:
     """Check each image tells its lines' story; re-roll mismatches once."""
     ref = Path(state.character_ref_path) if state.character_ref_path else None
-    passed = 0
+    passed = rerolls = 0
     for sc in state.scenes:
         verdict = {}
         for attempt in range(MAX_IMAGE_REROLLS + 1):
             verdict = _review_one(p, sc, state)
-            if verdict.get("matches"):
+            if _verdict_ok(verdict):
                 break
             issues = "; ".join(verdict.get("issues", []))[:300]
-            state.notes.append(f"qc_visuals: scene {sc.id} mismatch: {issues}")
+            state.notes.append(
+                f"qc_visuals: scene {sc.id} mismatch "
+                f"(observed: {verdict.get('observed_action', '?')[:120]}): "
+                f"{issues}")
             if attempt >= MAX_IMAGE_REROLLS:
                 break
             corrected = (verdict.get("corrected_prompt") or "").strip()
@@ -209,34 +217,52 @@ def _vision_review(state: PipelineState, p: Providers, prof: Profile,
             p.images.generate(sc.image_prompt, Path(sc.image_path),
                               reference=ref, size=prof.size)
             _invalidate_clip(sc, run_dir)
+            rerolls += 1
             state.notes.append(f"qc_visuals: scene {sc.id} re-rolled")
-        if verdict.get("matches"):
+        if _verdict_ok(verdict):
             passed += 1
+    state.notes.append(
+        f"qc_visuals: cost — {len(state.scenes) + rerolls} vision reviews, "
+        f"{rerolls} image re-rolls")
     return round(passed / len(state.scenes), 3)
 
 
+_QC_SYSTEM = (
+    "VISION_QC_TASK: You are reviewing imagery for a kids' story video. "
+    "FIRST describe, then judge — fill observed_action with what the "
+    "image(s) ACTUALLY show for every physical contact between characters "
+    "and objects (e.g. 'turtle lies ON TOP of the stick, flippers over it'), "
+    "and expected_action with what the lines + story require (continuity: a "
+    "mechanism the story establishes anywhere — e.g. the character travels "
+    "hanging by its MOUTH from a stick — must hold in EVERY scene that "
+    "shows it, even if this scene's lines don't repeat the detail). Set "
+    "action_exact=true ONLY if they agree in every detail: on-top vs "
+    "hanging-below, mouth vs limbs, which part touches what. Being on/over "
+    "an object when the story says hanging beneath it by the mouth is "
+    "WRONG. Also check setting/lighting match the lines and there is no "
+    "distorted anatomy, extra limbs or uncanny faces. Minor style license "
+    "is fine; mechanism, lighting or anatomy errors are not. Return JSON: "
+    '{"observed_action": str, "expected_action": str, "action_exact": bool, '
+    '"matches": bool, "issues": [str], "corrected_prompt": str} — matches '
+    "must be false when action_exact is false; corrected_prompt is a full "
+    "replacement image prompt fixing the issues (empty if matches)."
+)
+
+
+def _qc_context(state: PipelineState, sc) -> str:
+    return (f"FULL STORY (for continuity):\n{state.story_text[:3000]}\n\n"
+            f"MAIN CHARACTER: {state.character_anchor}\n\n"
+            f"NARRATION LINES THIS IMAGERY ILLUSTRATES:\n{sc.narration_text}"
+            f"\n\nIMAGE PROMPT USED:\n{sc.image_prompt}")
+
+
+def _verdict_ok(v: dict) -> bool:
+    return bool(v.get("matches")) and bool(v.get("action_exact", True))
+
+
 def _review_one(p: Providers, sc, state: PipelineState) -> dict:
-    return p.llm.complete_json(
-        "VISION_QC_TASK: You are reviewing one illustration for a kids' "
-        "story video. Compare the image against the narration lines it "
-        "illustrates AND the full story (continuity: a mechanism the story "
-        "establishes anywhere — e.g. the character travels hanging by its "
-        "MOUTH from a stick — must hold in every scene that shows it, even "
-        "if this scene's lines don't repeat the detail). Check: (1) the "
-        "EXACT physical action — who touches what and how (biting vs "
-        "holding with limbs, sitting vs standing); (2) setting/lighting "
-        "match the lines; (3) no distorted anatomy, extra limbs or uncanny "
-        "faces. Minor artistic license is fine; a wrong action or mechanism, "
-        "wrong lighting or creepy rendering is not. Return JSON: "
-        '{"matches": bool, "issues": [str], "corrected_prompt": str} '
-        "— corrected_prompt is a full replacement image prompt that fixes "
-        "the issues (empty string if matches).",
-        f"FULL STORY (for continuity):\n{state.story_text[:3000]}\n\n"
-        f"MAIN CHARACTER: {state.character_anchor}\n\n"
-        f"NARRATION LINES THIS IMAGE ILLUSTRATES:\n{sc.narration_text}\n\n"
-        f"IMAGE PROMPT USED:\n{sc.image_prompt}",
-        images=[Path(sc.image_path)],
-    )
+    return p.llm.complete_json(_QC_SYSTEM, _qc_context(state, sc),
+                               images=[Path(sc.image_path)])
 
 
 def _invalidate_clip(sc, run_dir: Path) -> None:
@@ -268,9 +294,12 @@ def voice(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> f
 
 
 def animate(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> float:
-    """Visual clip per scene, sized to that scene's narration audio."""
+    """Visual clip per scene, sized to that scene's narration audio.
+    Hero clips are vision-reviewed via extracted frames (animation models
+    can drift from the source image's action) with a one-re-render cap."""
     clips_dir = run_dir / "clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
+    rendered = reused = clip_rerolls = failed = 0
     for sc in state.scenes:
         # pad every scene clip by one crossfade: xfade_concat overlaps clips
         # by fade_s, so without padding the video track ends n_fades*fade_s
@@ -279,11 +308,29 @@ def animate(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) ->
         out = clips_dir / f"scene_{sc.id:02d}.mp4"
         if sc.is_hero:
             raw = clips_dir / f"scene_{sc.id:02d}_hero_raw.mp4"
-            # hero renders are the expensive step — never re-pay for a clip
-            # that a previous (crashed/paused) attempt already downloaded
-            if not raw.exists() or raw.stat().st_size == 0:
-                motion = sc.motion_prompt or f"gentle slow motion, {sc.title}"
-                p.video.animate(Path(sc.image_path), motion, dur, raw)
+            for attempt in range(2):
+                # hero renders are the expensive step — never re-pay for a
+                # clip a previous (crashed/paused) attempt already downloaded
+                if not raw.exists() or raw.stat().st_size == 0:
+                    motion = (sc.motion_prompt
+                              or f"gentle slow motion, {sc.title}")
+                    p.video.animate(Path(sc.image_path), motion, dur, raw)
+                    rendered += 1
+                elif attempt == 0:
+                    reused += 1
+                if state.mock or _clip_review_ok(p, sc, state, raw, run_dir):
+                    break
+                if attempt == 0:  # one paid re-render, with sharpened motion
+                    raw.unlink()
+                    sc.motion_prompt = ((sc.motion_prompt or "").rstrip("; ")
+                        + "; CRITICAL: keep the exact physical contact and "
+                          "pose from the source image unchanged throughout")
+                    clip_rerolls += 1
+                    state.notes.append(f"animate: scene {sc.id} clip re-rolled")
+                else:
+                    failed += 1
+                    state.notes.append(f"animate: scene {sc.id} clip still "
+                                       "mismatched after re-roll")
             ff.normalize_clip(raw, out, size=prof.size, fps=prof.fps)
             # hero models cap at short clips; hold the last look via kenburns if short
             if ff.probe_duration(out) < dur - 0.5:
@@ -301,7 +348,35 @@ def animate(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) ->
             ff.make_kenburns_clip(Path(sc.image_path), dur, out,
                                   size=prof.size, fps=prof.fps)
         sc.clip_path = str(out)
+    state.notes.append(f"animate: cost — hero rendered {rendered}, "
+                       f"reused {reused}, clip re-rolls {clip_rerolls}")
+    if failed:
+        return round(1 - failed / len(state.scenes), 3)
     return 1.0
+
+
+def _clip_review_ok(p: Providers, sc, state: PipelineState, raw: Path,
+                    run_dir: Path) -> bool:
+    """Review two extracted frames of a hero clip against the story."""
+    qc_dir = run_dir / "qc"
+    qc_dir.mkdir(parents=True, exist_ok=True)
+    dur = ff.probe_duration(raw)
+    frames = []
+    for tag, t in (("a", dur * 0.25), ("b", dur * 0.75)):
+        frames.append(ff.extract_frame(
+            raw, t, qc_dir / f"scene_{sc.id:02d}_{tag}.png"))
+    v = p.llm.complete_json(
+        _QC_SYSTEM + " The images are FRAMES FROM THE ANIMATED CLIP for "
+        "this scene — animation can drift from the approved source image, "
+        "so judge the frames themselves.",
+        _qc_context(state, sc), images=frames)
+    if _verdict_ok(v):
+        return True
+    state.notes.append(
+        f"animate: scene {sc.id} clip mismatch "
+        f"(observed: {v.get('observed_action', '?')[:120]}): "
+        + "; ".join(v.get("issues", []))[:200])
+    return False
 
 
 def music(state: PipelineState, p: Providers, prof: Profile, run_dir: Path) -> float:
