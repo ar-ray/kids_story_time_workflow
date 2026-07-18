@@ -518,6 +518,49 @@ def test_cost_notes_report_generated_vs_reused(fast_profile, tmp_path):
                for n in state.notes)
 
 
+def test_audit_reports_without_regenerating(fast_profile, tmp_path, capsys):
+    """audit is report-only: flags story mismatches, spends nothing on
+    generation (it has no image/video provider at all)."""
+    from kids_story_pipeline.audit import audit_run
+
+    state = PipelineState(run_id="aud", story_text="s " * 40,
+                          profile_name="bedtime", mock=False)
+    state.scenes = [_scene_with_image(tmp_path, 0, hero=True),
+                    _scene_with_image(tmp_path, 1)]
+    (tmp_path / "clips").mkdir(parents=True, exist_ok=True)
+    ff.make_kenburns_clip(Path(state.scenes[0].image_path), 2.0,
+                          tmp_path / "clips" / "scene_00_hero_raw.mp4",
+                          size=(320, 180), fps=12)
+    calls = {"n": 0}
+
+    class Reviewer:
+        def complete_json(self, system, prompt, images=None):
+            calls["n"] += 1
+            bad = images and "scene_01" in str(images[0])
+            return {"observed_action": "turtle rides stick",
+                    "expected_action": "turtle bites stick",
+                    "action_exact": not bad, "matches": not bad,
+                    "issues": ["invented riding pose"] if bad else [],
+                    "corrected_prompt": ""}
+
+    ok = audit_run(state, Reviewer(), tmp_path, include_clips=True)
+    out = capsys.readouterr().out
+    assert not ok
+    assert calls["n"] == 3          # 2 images + 1 hero clip, nothing more
+    assert "✅ scene 0" in out and "❌ scene 1" in out
+    assert "IMAGE mismatch" in out and "invented riding pose" in out
+    assert "Nothing was regenerated" in out
+    assert "$0.15" in out           # repair estimate for 1 image
+
+    class AllGood(Reviewer):
+        def complete_json(self, system, prompt, images=None):
+            return {"observed_action": "x", "expected_action": "x",
+                    "action_exact": True, "matches": True, "issues": [],
+                    "corrected_prompt": ""}
+
+    assert audit_run(state, AllGood(), tmp_path) is True
+
+
 # ---- gate pause / resume ----------------------------------------------------
 
 def test_gate_pauses_and_resume_approves(fast_profile, tmp_path, monkeypatch):
