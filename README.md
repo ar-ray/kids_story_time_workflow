@@ -72,8 +72,12 @@ PYTHONPATH=src python -m kids_story_pipeline run --story my_story.txt
 #    story and re-run, or approve and continue:
 PYTHONPATH=src python -m kids_story_pipeline resume <RUN_ID> --approve
 
-# 4. watch runs/<RUN_ID>/final.mp4 yourself — no gate checks visual taste yet
-# 5. upload manually: final.mp4 + thumbnail.png, title/description/tags from
+# 4. fidelity check (~cents, regenerates NOTHING): is every scene exactly
+#    what the story says — right actions, nothing made up?
+PYTHONPATH=src python -m kids_story_pipeline audit <RUN_ID> --clips
+
+# 5. watch runs/<RUN_ID>/final.mp4 yourself — the final gate is your eyes
+# 6. upload manually: final.mp4 + thumbnail.png, title/description/tags from
 #    metadata.json, and ALWAYS mark it "Made for Kids" (COPPA)
 ```
 
@@ -143,14 +147,37 @@ verdicts), scene motion prompts, delivery naming, the real-provider request
 schemas (monkeypatched `requests`), the smoke runner, and a full end-to-end
 mock run asserting all four deliverables.
 
-**Content-fidelity strategy (three layers):** (1) generation prompts demand
-the exact physical action, lighting and speaker per scene; (2) at runtime,
-`qc_visuals` sends every image + its narration lines to a vision LLM and
-re-rolls mismatches once with the reviewer's corrected prompt (stale clips
-invalidated automatically) — scoring below the gate threshold still pauses
-for a human; (3) the human watch-through before publishing stays the final
-check. Offline tests exercise layer 2's mechanics with fake verdicts; they
-can't judge real images — that's what the runtime reviewer and you are for.
+**Content-fidelity strategy — every scene must show exactly what the story
+states, nothing invented:**
+1. *Generation*: scene prompts must state the exact physical action (who
+   touches what and how), story-accurate lighting, and a per-scene motion
+   prompt for animation. The character anchor is derived from the story.
+2. *Runtime review*: every image is vision-reviewed against its lines AND
+   the full story (continuity — a mechanism established anywhere must hold
+   everywhere); the reviewer must describe observed vs expected action
+   before judging, and invented characters/objects/events are mismatches.
+   Hero clips are reviewed too, via extracted frames (animation drifts).
+3. *On demand*: `audit <RUN_ID> [--clips]` re-reviews any existing run,
+   report-only. Use it after every run and before publishing.
+4. *Human*: your watch-through stays the final gate — reviewers have both
+   missed real breaks and nitpicked fine ones.
+
+**Cost rules (enforced in code, follow them in repairs too):**
+- Re-rolls are hard-capped: 1 per image, 1 per hero clip, per run.
+- Paid clip re-renders happen ONLY for mechanism/contact violations —
+  expression/motion-phase nits are logged and accepted.
+- Every generating node skips assets already on disk, so resumes and
+  repairs never re-pay; each run's `state.json` notes report
+  `generated vs reused` counts — check them if a run cost more than
+  expected (roughly: image ~$0.15, hero clip ~$0.35, narration cents).
+- Repair pattern: `audit` first (~cents) → eyeball the flagged files →
+  delete ONLY confirmed-bad `scene_XX.png`/clips (fix that scene's
+  `image_prompt` in state.json if needed) → `resume`. Never re-run a whole
+  story to fix one scene.
+
+Offline tests (46) exercise the review/re-roll/caching mechanics with fake
+verdicts; they can't judge real images — that's the runtime reviewer's and
+your job.
 
 ## Design notes
 

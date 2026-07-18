@@ -16,6 +16,9 @@ load with `set -a; . ./.env; set +a`; never read or print `.env` contents)
 - Produce a video (REAL, ~$8-15, 15-40 min): `PYTHONPATH=src python -m kids_story_pipeline run --story my_story.txt`
 - Resume a paused/failed run: `PYTHONPATH=src python -m kids_story_pipeline resume <RUN_ID> --approve`
   (gate pauses: inspect `runs/<id>/PENDING_APPROVAL.txt` + state.json notes BEFORE approving)
+- Fidelity audit (report-only, ~cents, regenerates NOTHING):
+  `PYTHONPATH=src python -m kids_story_pipeline audit <RUN_ID> --clips`
+  — checks every scene image/clip is exactly what the story states
 
 ## Architecture
 - `src/kids_story_pipeline/nodes.py` — 14 linear nodes (NODES list at bottom is the graph)
@@ -35,7 +38,15 @@ load with `set -a; . ./.env; set +a`; never read or print `.env` contents)
 - Style/character anchors must be appended to every image prompt (consistency)
 - Ask clarifying questions when a task is ambiguous; always test before commit
 - Never re-pay for landed assets: nodes skip provider calls when the artifact
-  already exists (hero raws, thumb base); resumes reuse everything cached
+  already exists (images, hero raws, thumb base); resumes reuse everything
+- COST DISCIPLINE for repairs: `audit` first (report-only), view flagged
+  files YOURSELF (Read the png / extract frames — free), then delete only
+  confirmed-bad assets and resume. Re-roll caps are 1 per image / 1 per
+  clip; clip re-renders only for mechanism breaks, never expression nits.
+  Check the `cost —` notes in state.json after every run.
+- Scene imagery must show exactly what the story states — nothing invented;
+  the vision reviewer gets the FULL story (continuity) and must report
+  observed vs expected action before judging
 - A/V sync invariant: scene clips are padded by one `crossfade_s` (hero tails
   by their inner fade) so video length == narration + outro exactly — keep
   this when touching animate/assemble, and keep the e2e duration assertion
