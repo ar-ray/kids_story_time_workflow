@@ -239,9 +239,13 @@ _QC_SYSTEM = (
     "action_exact=true ONLY if they agree in every detail: on-top vs "
     "hanging-below, mouth vs limbs, which part touches what. Being on/over "
     "an object when the story says hanging beneath it by the mouth is "
-    "WRONG. Also check setting/lighting match the lines and there is no "
+    "WRONG. NOTHING MADE UP: the imagery must not introduce characters, "
+    "objects or story events that the story does not contain for this "
+    "scene — invented content is a mismatch (set action_exact=false). "
+    "Also check setting/lighting match the lines and there is no "
     "distorted anatomy, extra limbs or uncanny faces. Minor style license "
-    "is fine; mechanism, lighting or anatomy errors are not. Return JSON: "
+    "(background foliage, framing) is fine; mechanism, invention, lighting "
+    "or anatomy errors are not. Return JSON: "
     '{"observed_action": str, "expected_action": str, "action_exact": bool, '
     '"matches": bool, "issues": [str], "corrected_prompt": str} — matches '
     "must be false when action_exact is false; corrected_prompt is a full "

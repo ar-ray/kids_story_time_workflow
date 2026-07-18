@@ -4,6 +4,7 @@
   python -m kids_story_pipeline resume <RUN_ID> --approve
   python -m kids_story_pipeline doctor
   python -m kids_story_pipeline smoke [--only llm,image,tts,video]
+  python -m kids_story_pipeline audit <RUN_ID> [--clips]
 """
 from __future__ import annotations
 
@@ -46,6 +47,15 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("doctor", help="check environment and API keys")
 
+    p_aud = sub.add_parser(
+        "audit", help="report-only fidelity review of an existing run: is "
+                      "every scene exactly what the story says? (~cents, "
+                      "regenerates NOTHING)")
+    p_aud.add_argument("run_id")
+    p_aud.add_argument("--profile", default="bedtime")
+    p_aud.add_argument("--clips", action="store_true",
+                       help="also review rendered hero clips via frames")
+
     p_smoke = sub.add_parser(
         "smoke", help="one tiny REAL (paid) API call per provider to "
                       "confirm keys work before a full run")
@@ -60,6 +70,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.cmd == "smoke":
         return _smoke(args)
+
+    if args.cmd == "audit":
+        return _audit(args)
 
     overrides = {"gate_enabled": False} if getattr(args, "no_gate", False) else None
     profile = load_profile(args.profile, overrides)
@@ -86,6 +99,20 @@ def main(argv: list[str] | None = None) -> int:
         dest = _deliver(Path(state.master_video_path), args.out, stem)
         print(f"   delivered: {dest}")
     return 0
+
+
+def _audit(args) -> int:
+    from .audit import audit_run
+    from .graph import run_dir_for
+    from .providers.real import AnthropicLLM
+    from .state import PipelineState
+
+    profile = load_profile(args.profile)
+    rd = run_dir_for(args.run_id)
+    state = PipelineState.load(rd)
+    ok = audit_run(state, AnthropicLLM(profile), rd,
+                   include_clips=args.clips)
+    return 0 if ok else 1
 
 
 def _deliver(master: Path, out: Path, stem: str) -> Path:
