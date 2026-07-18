@@ -74,5 +74,7 @@ def audit_run(state: PipelineState, llm, run_dir: Path,
                 "flagged files yourself before paying (reviewers have "
                 "false-positived on expression/phase nits): delete only the "
                 "confirmed-bad scene_XX.png / its clips, fix the scene's "
-                "image_prompt in state.json if needed, then `resume`.")
+                "image_prompt in state.json if needed, then `resume`. "
+                "For HERO scenes the delivered visual is the CLIP — an "
+                "image flag whose clip passes usually needs no action.")
     return all_ok
